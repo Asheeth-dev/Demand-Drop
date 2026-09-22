@@ -186,5 +186,45 @@ export const setDemandStatus = createServerFn({ method: "POST" })
       .update({ status: data.status })
       .in("id", data.ids);
     if (error) throw new Error(error.message);
+
+    let notified = 0;
+    const whatsappConfigured = Boolean(
+      process.env["WHATSAPP_ACCESS_TOKEN"] && process.env["WHATSAPP_PHONE_NUMBER_ID"],
+    );
+    if (data.status === "stocked" && whatsappConfigured) {
+      const { data: waiting } = await db
+        .from("demand_requests")
+        .select("id, product_name, customer_phone")
+        .in("id", data.ids)
+        .not("customer_phone", "is", null)
+        .is("notified_at", null);
+      for (const row of waiting ?? []) {
+        if (row.customer_phone && (await sendWhatsApp(row.customer_phone, row.product_name))) {
+          await db
+            .from("demand_requests")
+            .update({ notified_at: new Date().toISOString() })
+            .eq("id", row.id);
+          notified += 1;
+        }
+      }
+    }
+    return { ok: true as const, notified, whatsappConfigured };
+  });
+
+/** Customer leaves their WhatsApp number against their request. */
+export const saveNotifyNumber = createServerFn({ method: "POST" })
+  .inputValidator((input: { requestId: string; phone: string }) => {
+    if (!UUID_RE.test(String(input.requestId ?? ""))) throw new Error("Invalid request.");
+    const phone = normalizePhone(String(input.phone ?? ""));
+    if (!phone) throw new Error("That doesn't look like a valid WhatsApp number.");
+    return { requestId: input.requestId, phone };
+  })
+  .handler(async ({ data }) => {
+    const db = await serverDb();
+    const { error } = await db
+      .from("demand_requests")
+      .update({ customer_phone: data.phone })
+      .eq("id", data.requestId);
+    if (error) throw new Error(error.message);
     return { ok: true as const };
   });
