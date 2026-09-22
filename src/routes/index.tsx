@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { submitDemand } from "@/lib/demand.functions";
+import { submitDemand, saveNotifyNumber } from "@/lib/demand.functions";
 import { blobToBase64, useRecorder } from "@/lib/useRecorder";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +41,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Result =
-  | { kind: "success"; product: string; category: string | null; transcript: string }
+  | { kind: "success"; product: string; category: string | null; transcript: string; requestId: string }
   | { kind: "unclear"; transcript: string }
   | { kind: "error"; message: string };
 
@@ -51,7 +51,21 @@ function CustomerScreen() {
   const [result, setResult] = useState<Result | null>(null);
   const [typing, setTyping] = useState(false);
   const [text, setText] = useState("");
+  const [phone, setPhone] = useState("");
+  const [phoneState, setPhoneState] = useState<"idle" | "saving" | "saved" | "invalid">("idle");
   const send = useServerFn(submitDemand);
+  const saveNumber = useServerFn(saveNotifyNumber);
+
+  async function handleSavePhone(requestId: string) {
+    if (!phone.trim() || phoneState === "saving") return;
+    setPhoneState("saving");
+    try {
+      await saveNumber({ data: { requestId, phone: phone.trim() } });
+      setPhoneState("saved");
+    } catch {
+      setPhoneState("invalid");
+    }
+  }
 
   async function process(payload: { audioBase64?: string; mimeType?: string; text?: string }) {
     setBusy(true);
@@ -64,7 +78,10 @@ function CustomerScreen() {
           product: res.request?.product_name ?? "",
           category: res.request?.category ?? null,
           transcript: res.transcript,
+          requestId: res.request?.id ?? "",
         });
+        setPhone("");
+        setPhoneState("idle");
       } else {
         setResult({ kind: "unclear", transcript: res.transcript });
       }
@@ -188,6 +205,52 @@ function CustomerScreen() {
                   <p className="mt-1 truncate text-sm font-semibold">{result.product}</p>
                 </div>
               </div>
+              {result.requestId && (
+                <div className="mt-5 rounded-lg border border-border bg-secondary/40 p-4 text-left">
+                  {phoneState === "saved" ? (
+                    <p className="flex items-center gap-2 text-sm font-semibold text-success">
+                      <CheckCircle2 className="size-4" />
+                      Done — we'll WhatsApp you when {result.product} is stocked.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs font-semibold">
+                        Want a WhatsApp message when it's back in stock?
+                      </p>
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void handleSavePhone(result.requestId);
+                        }}
+                        className="mt-2 flex gap-2"
+                      >
+                        <Input
+                          value={phone}
+                          onChange={(e) => {
+                            setPhone(e.target.value);
+                            if (phoneState === "invalid") setPhoneState("idle");
+                          }}
+                          placeholder="WhatsApp number, e.g. 98765 43210"
+                          inputMode="tel"
+                          className="h-10"
+                        />
+                        <Button
+                          type="submit"
+                          disabled={phoneState === "saving" || !phone.trim()}
+                          className="h-10 shrink-0"
+                        >
+                          {phoneState === "saving" ? <Loader2 className="size-4 animate-spin" /> : "Notify me"}
+                        </Button>
+                      </form>
+                      {phoneState === "invalid" && (
+                        <p className="mt-1.5 text-xs text-destructive">
+                          That number doesn't look right — check it and try again.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 <Button type="button" variant="secondary" onClick={() => setResult(null)}>
                   <RotateCcw />
