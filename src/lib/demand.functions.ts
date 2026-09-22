@@ -74,6 +74,42 @@ async function extractProduct(transcript: string, apiKey: string) {
 const STATUSES = ["new", "ordering", "stocked", "ignored"] as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Normalise to WhatsApp's digits-only international format; default to India. */
+function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  if (/^[6-9]\d{9}$/.test(digits)) return `91${digits}`;
+  if (/^91[6-9]\d{9}$/.test(digits)) return digits;
+  if (digits.length >= 11 && digits.length <= 15) return digits;
+  return null;
+}
+
+/** Send the "back in stock" WhatsApp template via Meta's WhatsApp Cloud API. */
+async function sendWhatsApp(toDigits: string, productName: string): Promise<boolean> {
+  const token = process.env["WHATSAPP_ACCESS_TOKEN"];
+  const phoneNumberId = process.env["WHATSAPP_PHONE_NUMBER_ID"];
+  if (!token || !phoneNumberId) return false;
+  const template = process.env["WHATSAPP_TEMPLATE_NAME"] || "stock_alert";
+  const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: toDigits,
+      type: "template",
+      template: {
+        name: template,
+        language: { code: "en" },
+        components: [{ type: "body", parameters: [{ type: "text", text: productName }] }],
+      },
+    }),
+  });
+  if (!res.ok) {
+    console.error(`WhatsApp send failed [${res.status}]: ${await res.text()}`);
+    return false;
+  }
+  return true;
+}
+
 /** Full pipeline: audio (or typed text) -> transcript -> product -> saved row. */
 export const submitDemand = createServerFn({ method: "POST" })
   .inputValidator((input: { audioBase64?: string; mimeType?: string; text?: string }) => {
@@ -126,7 +162,7 @@ export const listDemands = createServerFn({ method: "GET" }).handler(async () =>
   const db = await serverDb();
   const { data, error } = await db
     .from("demand_requests")
-    .select("id, transcript, product_name, category, status, created_at")
+    .select("id, transcript, product_name, category, status, created_at, customer_phone, notified_at")
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) throw new Error(error.message);

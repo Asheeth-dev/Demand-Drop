@@ -19,7 +19,9 @@ export type Database = {
           category: string | null
           confidence: number | null
           created_at: string
+          customer_phone: string | null
           id: string
+          notified_at: string | null
           product_name: string
           status: string
           transcript: string
@@ -28,7 +30,9 @@ export type Database = {
           category?: string | null
           confidence?: number | null
           created_at?: string
+          customer_phone?: string | null
           id?: string
+          notified_at?: string | null
           product_name: string
           status?: string
           transcript: string
@@ -37,7 +41,9 @@ export type Database = {
           category?: string | null
           confidence?: number | null
           created_at?: string
+          customer_phone?: string | null
           id?: string
+          notified_at?: string | null
           product_name?: string
           status?: string
           transcript?: string
