@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Mic, PackageSearch, TrendingUp, Users } from "lucide-react";
+import { useState } from "react";
+import { MessageCircle, Mic, PackageSearch, TrendingUp, Users } from "lucide-react";
 
 import { listDemands, setDemandStatus } from "@/lib/demand.functions";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ type Row = {
   category: string | null;
   status: string;
   created_at: string;
+  customer_phone: string | null;
+  notified_at: string | null;
 };
 
 const STATUSES = ["new", "ordering", "stocked", "ignored"] as const;
@@ -65,7 +68,7 @@ function Dashboard() {
 
   // Group requests by product so the owner sees demand, not raw events.
   const grouped = Object.values(
-    rows.reduce<Record<string, { product: string; category: string | null; count: number; status: string; latest: string; ids: string[] }>>(
+    rows.reduce<Record<string, { product: string; category: string | null; count: number; status: string; latest: string; ids: string[]; waiting: number }>>(
       (acc, r) => {
         const key = r.product_name.toLowerCase();
         const existing = acc[key];
@@ -73,6 +76,7 @@ function Dashboard() {
           existing.count += 1;
           existing.ids.push(r.id);
           if (r.status !== "new") existing.status = r.status;
+          if (r.customer_phone && !r.notified_at) existing.waiting += 1;
         } else {
           acc[key] = {
             product: r.product_name,
@@ -81,6 +85,7 @@ function Dashboard() {
             status: r.status,
             latest: r.created_at,
             ids: [r.id],
+            waiting: r.customer_phone && !r.notified_at ? 1 : 0,
           };
         }
         return acc;
@@ -89,8 +94,19 @@ function Dashboard() {
     ),
   ).sort((a, b) => b.count - a.count || +new Date(b.latest) - +new Date(a.latest));
 
+  const [notice, setNotice] = useState<string | null>(null);
+
   async function setStatus(ids: string[], status: string) {
-    await updateStatus({ data: { ids, status } });
+    const res = await updateStatus({ data: { ids, status } });
+    if (status === "stocked") {
+      setNotice(
+        !res.whatsappConfigured
+          ? "Marked as stocked. WhatsApp alerts aren't connected yet, so no messages were sent."
+          : res.notified > 0
+            ? `Marked as stocked — WhatsApp sent to ${res.notified === 1 ? "1 customer" : `${res.notified} customers`}.`
+            : "Marked as stocked. Nobody left a WhatsApp number for this one.",
+      );
+    }
     void qc.invalidateQueries({ queryKey: ["demand_requests"] });
   }
 
@@ -133,6 +149,13 @@ function Dashboard() {
         <Stat icon={<TrendingUp className="size-4" />} label="Today" value={todayCount} />
       </div>
 
+      {notice && (
+        <div className="mt-6 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-medium text-primary">
+          <MessageCircle className="size-4 shrink-0" />
+          {notice}
+        </div>
+      )}
+
       <div className="surface mt-6 overflow-hidden rounded-xl">
         {isLoading ? (
           <div className="space-y-3 p-6">
@@ -167,6 +190,12 @@ function Dashboard() {
                   <p className="text-xs text-muted-foreground">
                     {g.category ?? "Other"} · {g.count === 1 ? "1 person asked" : `${g.count} people asked`}
                   </p>
+                  {g.waiting > 0 && (
+                    <p className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                      <MessageCircle className="size-3" />
+                      {g.waiting === 1 ? "1 customer" : `${g.waiting} customers`} waiting for a WhatsApp alert
+                    </p>
+                  )}
                 </div>
                 <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_STYLE[g.status] ?? ""}`}>
                   {STATUS_LABEL[g.status] ?? g.status}
