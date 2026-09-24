@@ -2,9 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { MessageCircle, Mic, PackageSearch, TrendingUp, Users } from "lucide-react";
+import { Loader2, MessageCircle, Mic, PackageSearch, Send, TrendingUp, Users } from "lucide-react";
 
-import { listDemands, setDemandStatus } from "@/lib/demand.functions";
+import { listDemands, notifyDemandCustomers, setDemandStatus } from "@/lib/demand.functions";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/dashboard")({
@@ -49,14 +49,20 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_STYLE: Record<string, string> = {
   new: "bg-accent/25 text-accent-foreground",
   ordering: "bg-primary/15 text-primary",
-  stocked: "bg-secondary text-secondary-foreground",
-  ignored: "bg-muted text-muted-foreground",
+  stocked: "bg-success/15 text-success",
+  ignored: "bg-destructive/15 text-destructive",
+};
+
+const STATUS_SELECT_STYLE: Record<string, string> = {
+  stocked: "border-success/40 bg-success/10 text-success",
+  ignored: "border-destructive/40 bg-destructive/10 text-destructive",
 };
 
 function Dashboard() {
   const qc = useQueryClient();
   const fetchRequests = useServerFn(listDemands);
   const updateStatus = useServerFn(setDemandStatus);
+  const sendAlerts = useServerFn(notifyDemandCustomers);
 
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ["demand_requests"],
@@ -68,7 +74,7 @@ function Dashboard() {
 
   // Group requests by product so the owner sees demand, not raw events.
   const grouped = Object.values(
-    rows.reduce<Record<string, { product: string; category: string | null; count: number; status: string; latest: string; ids: string[]; waiting: number }>>(
+    rows.reduce<Record<string, { product: string; category: string | null; count: number; status: string; latest: string; ids: string[]; waitingContacts: { id: string; phone: string }[] }>>(
       (acc, r) => {
         const key = r.product_name.toLowerCase();
         const existing = acc[key];
@@ -76,7 +82,9 @@ function Dashboard() {
           existing.count += 1;
           existing.ids.push(r.id);
           if (r.status !== "new") existing.status = r.status;
-          if (r.customer_phone && !r.notified_at) existing.waiting += 1;
+          if (r.customer_phone && !r.notified_at) {
+            existing.waitingContacts.push({ id: r.id, phone: r.customer_phone });
+          }
         } else {
           acc[key] = {
             product: r.product_name,
@@ -85,7 +93,8 @@ function Dashboard() {
             status: r.status,
             latest: r.created_at,
             ids: [r.id],
-            waiting: r.customer_phone && !r.notified_at ? 1 : 0,
+            waitingContacts:
+              r.customer_phone && !r.notified_at ? [{ id: r.id, phone: r.customer_phone }] : [],
           };
         }
         return acc;
@@ -95,19 +104,49 @@ function Dashboard() {
   ).sort((a, b) => b.count - a.count || +new Date(b.latest) - +new Date(a.latest));
 
   const [notice, setNotice] = useState<string | null>(null);
+  const [sendingProduct, setSendingProduct] = useState<string | null>(null);
 
   async function setStatus(ids: string[], status: string) {
-    const res = await updateStatus({ data: { ids, status } });
-    if (status === "stocked") {
+    try {
+      const res = await updateStatus({ data: { ids, status } });
+      if (status === "stocked") {
+        setNotice(
+          !res.whatsappConfigured
+            ? "Marked as stocked. WhatsApp alerts aren't connected yet, so no messages were sent."
+            : res.notified > 0
+              ? `Marked as stocked — WhatsApp sent to ${res.notified === 1 ? "1 customer" : `${res.notified} customers`}.`
+              : res.failed > 0
+                ? "Marked as stocked, but WhatsApp couldn't send the alert. Please try the send button again."
+                : "Marked as stocked. Nobody left a WhatsApp number for this one.",
+        );
+      }
+      void qc.invalidateQueries({ queryKey: ["demand_requests"] });
+    } catch {
+      setNotice("The status couldn't be updated. Please try again.");
+    }
+  }
+
+  async function notifyCustomers(product: string, ids: string[]) {
+    if (sendingProduct) return;
+    setSendingProduct(product);
+    setNotice(null);
+    try {
+      const res = await sendAlerts({ data: { ids } });
       setNotice(
         !res.whatsappConfigured
-          ? "Marked as stocked. WhatsApp alerts aren't connected yet, so no messages were sent."
+          ? "WhatsApp alerts aren't connected yet, so no messages were sent."
           : res.notified > 0
-            ? `Marked as stocked — WhatsApp sent to ${res.notified === 1 ? "1 customer" : `${res.notified} customers`}.`
-            : "Marked as stocked. Nobody left a WhatsApp number for this one.",
+            ? `WhatsApp sent to ${res.notified === 1 ? "1 customer" : `${res.notified} customers`} waiting for ${product}.`
+            : res.failed > 0
+              ? "WhatsApp couldn't send the alert. Please try again."
+              : "There are no customers still waiting for this alert.",
       );
+      void qc.invalidateQueries({ queryKey: ["demand_requests"] });
+    } catch {
+      setNotice("The WhatsApp message couldn't be sent. Please try again.");
+    } finally {
+      setSendingProduct(null);
     }
-    void qc.invalidateQueries({ queryKey: ["demand_requests"] });
   }
 
   const todayCount = rows.filter(
@@ -190,11 +229,18 @@ function Dashboard() {
                   <p className="text-xs text-muted-foreground">
                     {g.category ?? "Other"} · {g.count === 1 ? "1 person asked" : `${g.count} people asked`}
                   </p>
-                  {g.waiting > 0 && (
-                    <p className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-primary">
-                      <MessageCircle className="size-3" />
-                      {g.waiting === 1 ? "1 customer" : `${g.waiting} customers`} waiting for a WhatsApp alert
-                    </p>
+                  {g.waitingContacts.length > 0 && (
+                    <div className="mt-1.5 space-y-1 text-xs text-primary">
+                      <p className="inline-flex items-center gap-1 font-medium">
+                        <MessageCircle className="size-3" />
+                        {g.waitingContacts.length === 1 ? "1 customer" : `${g.waitingContacts.length} customers`} waiting for a WhatsApp alert
+                      </p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
+                        {g.waitingContacts.map((contact) => (
+                          <span key={contact.id}>+{contact.phone}</span>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
                 <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_STYLE[g.status] ?? ""}`}>
@@ -204,14 +250,30 @@ function Dashboard() {
                   aria-label={`Set status for ${g.product}`}
                   value={g.status}
                   onChange={(e) => void setStatus(g.ids, e.target.value)}
-                  className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs"
+                  className={`rounded-lg border bg-card px-2 py-1.5 text-xs font-semibold ${STATUS_SELECT_STYLE[g.status] ?? "border-border text-foreground"}`}
                 >
                   {STATUSES.map((s) => (
-                    <option key={s} value={s}>
+                    <option key={s} value={s} className={STATUS_SELECT_STYLE[s] ?? "text-foreground"}>
                       {STATUS_LABEL[s]}
                     </option>
                   ))}
                 </select>
+                {g.waitingContacts.length > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void notifyCustomers(g.product, g.waitingContacts.map((contact) => contact.id))}
+                    disabled={sendingProduct !== null}
+                    className="shrink-0"
+                  >
+                    {sendingProduct === g.product ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Send />
+                    )}
+                    Send WhatsApp
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
