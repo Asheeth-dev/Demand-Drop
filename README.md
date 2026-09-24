@@ -21,8 +21,8 @@ A two-sided flow that takes **under 10 seconds** for the customer:
 1. **Customer side (a phone at the counter):** Tap the mic, say *"woh Maggi wala noodles nahi mila"* or type it. Done.
 2. **AI pipeline:** Speech is transcribed, then an LLM extracts a clean, standardised product name and category (`"Brown Bread"`, `"Bakery"`) from the messy input — handling English, Hindi, and Hinglish.
 3. **Stock alert opt-in:** The customer can leave their WhatsApp number to be told when the item is back.
-4. **Owner dashboard:** Requests are grouped by product and ranked by demand count, so the owner sees *what to order first*. Each product shows how many customers are waiting for a WhatsApp alert.
-5. **The loop closes:** The owner sets a product's status to **Just stocked** — and every waiting customer automatically receives a WhatsApp template message with the product name. Each customer is notified exactly once.
+4. **Owner dashboard:** Requests are grouped by product and ranked by demand count, so the owner sees *what to order first*. Each product shows how many customers are waiting and lists their WhatsApp numbers.
+5. **The loop closes:** The owner can set a product's status to **Just stocked** to send alerts automatically, or press **Send WhatsApp** to notify everyone waiting without changing the status. Each customer is notified exactly once.
 
 No app install, no login, no training. One button.
 
@@ -33,8 +33,9 @@ No app install, no login, no training. One button.
 | 🎤 One-tap voice capture | Web Audio recording with live level meter; falls back to typing |
 | 🌏 Multilingual AI | Transcription + product extraction tuned for English / Hindi / Hinglish kirana speech |
 | 🧹 Smart normalisation | Messy speech → clean retail name + category (`Dairy`, `Bakery`, `Beverages`, `Snacks`, `Staples`, `Personal Care`, `Household`) |
-| 📊 Demand-ranked dashboard | Products grouped and sorted by request count, with per-product status (`new` → `ordering` → `stocked` / `ignored`) |
-| 💬 WhatsApp stock alerts | Meta WhatsApp Cloud API template message sent automatically on restock; each customer notified once |
+| 📊 Demand-ranked dashboard | Products grouped and sorted by request count, with clear status colors: **Just stocked** is green and **Ignored** is red |
+| 📱 Visible waiting contacts | Each product shows the WhatsApp numbers of customers still waiting for its stock alert |
+| 💬 WhatsApp stock alerts | Send automatically when marked **Just stocked**, or manually with the per-product **Send WhatsApp** button; each customer is notified once |
 | 🔒 Locked-down data | All database access is server-side; the browser has zero direct table access |
 
 ## Tech Stack
@@ -59,13 +60,25 @@ submitDemand (server function)
 Postgres: demand_requests  (RLS locked, service-role only)
    ▲
 Owner dashboard ── polls listDemands every 2s
-   │  sets status → "Just stocked"
+   │  "Just stocked" or "Send WhatsApp"
    ▼
 WhatsApp Cloud API ── template message to each waiting customer
    └── notified_at stamped so nobody is messaged twice
 ```
 
-**Security model:** the `demand_requests` table has RLS enabled with *no* client policies — every read and write flows through validated server functions (`submitDemand`, `listDemands`, `setDemandStatus`, `saveNotifyNumber`). Phone numbers are normalised to WhatsApp's international format and validated server-side.
+**Security model:** the `demand_requests` table has RLS enabled with *no* client policies — every read and write flows through validated server functions (`submitDemand`, `listDemands`, `setDemandStatus`, `saveNotifyNumber`, `notifyDemandCustomers`). Phone numbers are normalised to WhatsApp's international format and validated server-side. Manual sends accept only validated request IDs and are limited to 200 recipients per action.
+
+## Owner Dashboard Workflow
+
+1. Open `/dashboard` to see live customer requests, grouped by product and ranked by demand.
+2. Check the waiting-customer line beneath a product to see every WhatsApp number that has opted in and has not yet been notified.
+3. Choose a stock state from the dropdown:
+   - **New** — newly requested.
+   - **Ordering now** — the owner is sourcing the item.
+   - **Just stocked** — shown in green; saves the status and immediately sends the stock alert.
+   - **Ignored** — shown in red.
+4. Alternatively, press **Send WhatsApp** beside any product to alert its waiting customers directly.
+5. The dashboard reports how many messages succeeded or failed, then removes successfully notified contacts from the waiting list.
 
 ## Running Locally
 
@@ -115,7 +128,7 @@ supabase/migrations/         # demand_requests schema + RLS lockdown
 - **Real problem, real scale:** 12M+ kirana stores; zero training or literacy required.
 - **AI where it matters:** not a chatbot gimmick — AI converts chaotic multilingual speech into *structured, actionable inventory data*.
 - **Closed revenue loop:** doesn't just record demand — it brings the customer back, measurably, via WhatsApp.
-- **Demo in 10 seconds:** tap mic → speak → watch the dashboard update in real time → mark stocked → WhatsApp fires.
+- **Demo in 10 seconds:** tap mic → speak → add a WhatsApp number → watch the dashboard update → click **Send WhatsApp** or mark **Just stocked** → alert fires.
 
 ## Roadmap
 
