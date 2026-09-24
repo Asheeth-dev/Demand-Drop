@@ -1,6 +1,6 @@
 # DemandDrop 🎙️
 
-**Voice-powered demand tracking for India's small merchants — built for a hackathon.**
+**Voice-powered demand tracking for India's small merchants .**
 
 DemandDrop closes the gap between what customers ask for and what a neighbourhood shop stocks. A customer walks in, can't find a product, taps one button, and *says* what they wanted — in English, Hindi, or Hinglish. AI turns that messy sentence into a clean, structured stock request on the owner's dashboard. When the owner restocks the item and flips its status to **Just stocked**, every customer who left their number gets a WhatsApp message: *"Good news! It's back in stock."*
 
