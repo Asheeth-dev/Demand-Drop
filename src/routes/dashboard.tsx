@@ -220,11 +220,11 @@ function Dashboard() {
         ) : (
           <ul className="divide-y divide-border">
             {grouped.map((g) => (
-              <li key={g.product} className="flex flex-wrap items-center gap-3 p-4 transition-colors hover:bg-secondary/40 sm:px-6">
+               <li key={g.product} className="flex flex-wrap items-start gap-3 p-4 transition-colors hover:bg-secondary/40 sm:items-center sm:px-6">
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-secondary font-mono text-lg font-bold text-primary">
                   {g.count}
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 basis-[calc(100%-3.5rem)] sm:flex-1 sm:basis-auto">
                   <p className="truncate font-medium">{g.product}</p>
                   <p className="text-xs text-muted-foreground">
                     {g.category ?? "Other"} · {g.count === 1 ? "1 person asked" : `${g.count} people asked`}
@@ -243,7 +243,7 @@ function Dashboard() {
                     </div>
                   )}
                 </div>
-                <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_STYLE[g.status] ?? ""}`}>
+                <span className={`ml-14 rounded-full px-3 py-1 text-xs font-medium sm:ml-0 ${STATUS_STYLE[g.status] ?? ""}`}>
                   {STATUS_LABEL[g.status] ?? g.status}
                 </span>
                 <select
