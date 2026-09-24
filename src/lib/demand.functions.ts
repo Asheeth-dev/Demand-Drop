@@ -110,6 +110,40 @@ async function sendWhatsApp(toDigits: string, productName: string): Promise<bool
   return true;
 }
 
+async function notifyWaitingRows(ids: string[]) {
+  const configured = Boolean(
+    process.env["WHATSAPP_ACCESS_TOKEN"] && process.env["WHATSAPP_PHONE_NUMBER_ID"],
+  );
+  if (!configured) return { notified: 0, failed: 0, whatsappConfigured: false };
+
+  const db = await serverDb();
+  const { data: waiting, error } = await db
+    .from("demand_requests")
+    .select("id, product_name, customer_phone")
+    .in("id", ids)
+    .not("customer_phone", "is", null)
+    .is("notified_at", null);
+  if (error) throw new Error(error.message);
+
+  let notified = 0;
+  let failed = 0;
+  for (const row of waiting ?? []) {
+    if (!row.customer_phone) continue;
+    if (await sendWhatsApp(row.customer_phone, row.product_name)) {
+      const { error: updateError } = await db
+        .from("demand_requests")
+        .update({ notified_at: new Date().toISOString() })
+        .eq("id", row.id)
+        .is("notified_at", null);
+      if (updateError) throw new Error(updateError.message);
+      notified += 1;
+    } else {
+      failed += 1;
+    }
+  }
+  return { notified, failed, whatsappConfigured: true };
+}
+
 /** Full pipeline: audio (or typed text) -> transcript -> product -> saved row. */
 export const submitDemand = createServerFn({ method: "POST" })
   .inputValidator((input: { audioBase64?: string; mimeType?: string; text?: string }) => {
@@ -187,29 +221,25 @@ export const setDemandStatus = createServerFn({ method: "POST" })
       .in("id", data.ids);
     if (error) throw new Error(error.message);
 
-    let notified = 0;
-    const whatsappConfigured = Boolean(
-      process.env["WHATSAPP_ACCESS_TOKEN"] && process.env["WHATSAPP_PHONE_NUMBER_ID"],
-    );
-    if (data.status === "stocked" && whatsappConfigured) {
-      const { data: waiting } = await db
-        .from("demand_requests")
-        .select("id, product_name, customer_phone")
-        .in("id", data.ids)
-        .not("customer_phone", "is", null)
-        .is("notified_at", null);
-      for (const row of waiting ?? []) {
-        if (row.customer_phone && (await sendWhatsApp(row.customer_phone, row.product_name))) {
-          await db
-            .from("demand_requests")
-            .update({ notified_at: new Date().toISOString() })
-            .eq("id", row.id);
-          notified += 1;
-        }
-      }
-    }
-    return { ok: true as const, notified, whatsappConfigured };
+    const result =
+      data.status === "stocked"
+        ? await notifyWaitingRows(data.ids)
+        : { notified: 0, failed: 0, whatsappConfigured: Boolean(
+            process.env["WHATSAPP_ACCESS_TOKEN"] && process.env["WHATSAPP_PHONE_NUMBER_ID"],
+          ) };
+    return { ok: true as const, ...result };
   });
+
+/** Owner-triggered alert without requiring another status change. */
+export const notifyDemandCustomers = createServerFn({ method: "POST" })
+  .inputValidator((input: { ids: string[] }) => {
+    const ids = (Array.isArray(input.ids) ? input.ids : [])
+      .filter((id) => UUID_RE.test(id))
+      .slice(0, 200);
+    if (ids.length === 0) throw new Error("No waiting customers selected.");
+    return { ids };
+  })
+  .handler(async ({ data }) => ({ ok: true as const, ...(await notifyWaitingRows(data.ids)) }));
 
 /** Customer leaves their WhatsApp number against their request. */
 export const saveNotifyNumber = createServerFn({ method: "POST" })
