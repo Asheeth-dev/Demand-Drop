@@ -46,16 +46,13 @@ const STATUS_LABEL: Record<string, string> = {
   stocked: "Just stocked",
   ignored: "Ignored",
 };
+// Selected status badge colors, exactly as the owner asked: solid fills,
+// black text. Dropdown options stay plain.
 const STATUS_STYLE: Record<string, string> = {
-  new: "bg-accent/25 text-accent-foreground",
-  ordering: "bg-primary/15 text-primary",
-  stocked: "bg-success/15 text-success",
-  ignored: "bg-destructive/15 text-destructive",
-};
-
-const STATUS_SELECT_STYLE: Record<string, string> = {
-  stocked: "border-success/40 bg-success/10 text-success",
-  ignored: "border-destructive/40 bg-destructive/10 text-destructive",
+  new: "bg-white text-black",
+  ordering: "bg-warning text-black",
+  stocked: "bg-success text-black",
+  ignored: "bg-destructive text-black",
 };
 
 function Dashboard() {
@@ -250,10 +247,10 @@ function Dashboard() {
                   aria-label={`Set status for ${g.product}`}
                   value={g.status}
                   onChange={(e) => void setStatus(g.ids, e.target.value)}
-                  className={`rounded-lg border bg-card px-2 py-1.5 text-xs font-semibold ${STATUS_SELECT_STYLE[g.status] ?? "border-border text-foreground"}`}
+                  className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-semibold text-foreground"
                 >
                   {STATUSES.map((s) => (
-                    <option key={s} value={s} className={STATUS_SELECT_STYLE[s] ?? "text-foreground"}>
+                    <option key={s} value={s} className="text-foreground">
                       {STATUS_LABEL[s]}
                     </option>
                   ))}
