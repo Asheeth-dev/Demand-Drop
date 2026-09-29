@@ -72,11 +72,11 @@ WhatsApp Cloud API ── template message to each waiting customer
 
 1. Open `/dashboard` to see live customer requests, grouped by product and ranked by demand.
 2. Check the waiting-customer line beneath a product to see every WhatsApp number that has opted in and has not yet been notified.
-3. Choose a stock state from the dropdown:
-   - **New** — newly requested.
-   - **Ordering now** — the owner is sourcing the item.
-   - **Just stocked** — shown in green; saves the status and immediately sends the stock alert.
-   - **Ignored** — shown in red.
+3. Choose a stock state from the plain dropdown; the status badge next to it recolors to match:
+   - **New** — newly requested; badge turns white with black text.
+   - **Ordering now** — the owner is sourcing the item; badge turns yellow with black text.
+   - **Just stocked** — badge turns green with black text; saves the status and immediately sends the stock alert.
+   - **Ignored** — badge turns red with black text.
 4. Alternatively, press **Send WhatsApp** beside any product to alert its waiting customers directly.
 5. The dashboard reports how many messages succeeded or failed, then removes successfully notified contacts from the waiting list.
 
