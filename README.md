@@ -33,7 +33,7 @@ No app install, no login, no training. One button.
 | 🎤 One-tap voice capture | Web Audio recording with live level meter; falls back to typing |
 | 🌏 Multilingual AI | Transcription + product extraction tuned for English / Hindi / Hinglish kirana speech |
 | 🧹 Smart normalisation | Messy speech → clean retail name + category (`Dairy`, `Bakery`, `Beverages`, `Snacks`, `Staples`, `Personal Care`, `Household`) |
-| 📊 Demand-ranked dashboard | Products grouped and sorted by request count, with clear status colors: **Just stocked** is green and **Ignored** is red |
+| 📊 Demand-ranked dashboard | Products grouped and sorted by request count, with solid status badges: **New** (white), **Ordering now** (yellow), **Just stocked** (green), **Ignored** (red) — all with black text |
 | 📱 Visible waiting contacts | Each product shows the WhatsApp numbers of customers still waiting for its stock alert |
 | 💬 WhatsApp stock alerts | Send automatically when marked **Just stocked**, or manually with the per-product **Send WhatsApp** button; each customer is notified once |
 | 🔒 Locked-down data | All database access is server-side; the browser has zero direct table access |
@@ -72,11 +72,11 @@ WhatsApp Cloud API ── template message to each waiting customer
 
 1. Open `/dashboard` to see live customer requests, grouped by product and ranked by demand.
 2. Check the waiting-customer line beneath a product to see every WhatsApp number that has opted in and has not yet been notified.
-3. Choose a stock state from the dropdown:
-   - **New** — newly requested.
-   - **Ordering now** — the owner is sourcing the item.
-   - **Just stocked** — shown in green; saves the status and immediately sends the stock alert.
-   - **Ignored** — shown in red.
+3. Choose a stock state from the plain dropdown; the status badge next to it recolors to match:
+   - **New** — newly requested; badge turns white with black text.
+   - **Ordering now** — the owner is sourcing the item; badge turns yellow with black text.
+   - **Just stocked** — badge turns green with black text; saves the status and immediately sends the stock alert.
+   - **Ignored** — badge turns red with black text.
 4. Alternatively, press **Send WhatsApp** beside any product to alert its waiting customers directly.
 5. The dashboard reports how many messages succeeded or failed, then removes successfully notified contacts from the waiting list.
 
