@@ -33,7 +33,7 @@ No app install, no login, no training. One button.
 | 🎤 One-tap voice capture | Web Audio recording with live level meter; falls back to typing |
 | 🌏 Multilingual AI | Transcription + product extraction tuned for English / Hindi / Hinglish kirana speech |
 | 🧹 Smart normalisation | Messy speech → clean retail name + category (`Dairy`, `Bakery`, `Beverages`, `Snacks`, `Staples`, `Personal Care`, `Household`) |
-| 📊 Demand-ranked dashboard | Products grouped and sorted by request count, with clear status colors: **Just stocked** is green and **Ignored** is red |
+| 📊 Demand-ranked dashboard | Products grouped and sorted by request count, with solid status badges: **New** (white), **Ordering now** (yellow), **Just stocked** (green), **Ignored** (red) — all with black text |
 | 📱 Visible waiting contacts | Each product shows the WhatsApp numbers of customers still waiting for its stock alert |
 | 💬 WhatsApp stock alerts | Send automatically when marked **Just stocked**, or manually with the per-product **Send WhatsApp** button; each customer is notified once |
 | 🔒 Locked-down data | All database access is server-side; the browser has zero direct table access |
