@@ -11,10 +11,12 @@ import {
   LayoutDashboard,
   ArrowRight,
   RotateCcw,
+  Send,
   Sparkles,
 } from "lucide-react";
 
 import { submitDemand, saveNotifyNumber } from "@/lib/demand.functions";
+import { suggestCatalogProducts } from "@/lib/catalog";
 import { blobToBase64, useRecorder } from "@/lib/useRecorder";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +28,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Tap and speak the product you couldn't find in the shop. DemandDrop turns your words into a stock request for the shop owner instantly.",
+          "Tap and speak — or type — the product you couldn't find, leave your WhatsApp number, and DemandDrop turns it into a stock request for the shop owner instantly.",
       },
       { property: "og:title", content: "DemandDrop — Speak what's missing" },
       {
@@ -41,7 +43,14 @@ export const Route = createFileRoute("/")({
 });
 
 type Result =
-  | { kind: "success"; product: string; category: string | null; transcript: string; requestId: string }
+  | {
+      kind: "success";
+      product: string;
+      category: string | null;
+      transcript: string;
+      requestId: string;
+      phoneSaved: boolean;
+    }
   | { kind: "unclear"; transcript: string }
   | { kind: "error"; message: string };
 
@@ -49,12 +58,14 @@ function CustomerScreen() {
   const { recording, level, start, stop } = useRecorder();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
-  const [typing, setTyping] = useState(false);
   const [text, setText] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [phone, setPhone] = useState("");
   const [phoneState, setPhoneState] = useState<"idle" | "saving" | "saved" | "invalid">("idle");
   const send = useServerFn(submitDemand);
   const saveNumber = useServerFn(saveNotifyNumber);
+
+  const suggestions = suggestCatalogProducts(text);
 
   async function handleSavePhone(requestId: string) {
     if (!phone.trim() || phoneState === "saving") return;
@@ -67,7 +78,7 @@ function CustomerScreen() {
     }
   }
 
-  async function process(payload: { audioBase64?: string; mimeType?: string; text?: string }) {
+  async function process(payload: { audioBase64?: string; mimeType?: string; text?: string; phone?: string }) {
     setBusy(true);
     setResult(null);
     try {
@@ -79,8 +90,9 @@ function CustomerScreen() {
           category: res.request?.category ?? null,
           transcript: res.transcript,
           requestId: res.request?.id ?? "",
+          phoneSaved: Boolean(payload.phone),
         });
-        setPhone("");
+        if (payload.phone) setPhone("");
         setPhoneState("idle");
       } else {
         setResult({ kind: "unclear", transcript: res.transcript });
@@ -106,7 +118,6 @@ function CustomerScreen() {
           kind: "error",
           message: "Microphone access is needed. Allow it, or type the item instead.",
         });
-        setTyping(true);
       }
       return;
     }
@@ -205,52 +216,58 @@ function CustomerScreen() {
                   <p className="mt-1 truncate text-sm font-semibold">{result.product}</p>
                 </div>
               </div>
-              {result.requestId && (
-                <div className="mt-5 rounded-lg border border-border bg-secondary/40 p-4 text-left">
-                  {phoneState === "saved" ? (
-                    <p className="flex items-center gap-2 text-sm font-semibold text-success">
-                      <CheckCircle2 className="size-4" />
-                      Done — we'll WhatsApp you when {result.product} is stocked.
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-xs font-semibold">
-                        Want a WhatsApp message when it's back in stock?
+              {result.requestId &&
+                (result.phoneSaved ? (
+                  <p className="mt-5 flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary/40 p-3 text-sm font-semibold text-success">
+                    <CheckCircle2 className="size-4" />
+                    We'll WhatsApp you when {result.product} is stocked.
+                  </p>
+                ) : (
+                  <div className="mt-5 rounded-lg border border-border bg-secondary/40 p-4 text-left">
+                    {phoneState === "saved" ? (
+                      <p className="flex items-center gap-2 text-sm font-semibold text-success">
+                        <CheckCircle2 className="size-4" />
+                        Done — we'll WhatsApp you when {result.product} is stocked.
                       </p>
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          void handleSavePhone(result.requestId);
-                        }}
-                        className="mt-2 flex gap-2"
-                      >
-                        <Input
-                          value={phone}
-                          onChange={(e) => {
-                            setPhone(e.target.value);
-                            if (phoneState === "invalid") setPhoneState("idle");
-                          }}
-                          placeholder="WhatsApp number, e.g. 98765 43210"
-                          inputMode="tel"
-                          className="h-10"
-                        />
-                        <Button
-                          type="submit"
-                          disabled={phoneState === "saving" || !phone.trim()}
-                          className="h-10 shrink-0"
-                        >
-                          {phoneState === "saving" ? <Loader2 className="size-4 animate-spin" /> : "Notify me"}
-                        </Button>
-                      </form>
-                      {phoneState === "invalid" && (
-                        <p className="mt-1.5 text-xs text-destructive">
-                          That number doesn't look right — check it and try again.
+                    ) : (
+                      <>
+                        <p className="text-xs font-semibold">
+                          Want a WhatsApp message when it's back in stock?
                         </p>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            void handleSavePhone(result.requestId);
+                          }}
+                          className="mt-2 flex gap-2"
+                        >
+                          <Input
+                            value={phone}
+                            onChange={(e) => {
+                              setPhone(e.target.value);
+                              if (phoneState === "invalid") setPhoneState("idle");
+                            }}
+                            placeholder="WhatsApp number, e.g. 98765 43210"
+                            inputMode="tel"
+                            className="h-10"
+                          />
+                          <Button
+                            type="submit"
+                            disabled={phoneState === "saving" || !phone.trim()}
+                            className="h-10 shrink-0"
+                          >
+                            {phoneState === "saving" ? <Loader2 className="size-4 animate-spin" /> : "Notify me"}
+                          </Button>
+                        </form>
+                        {phoneState === "invalid" && (
+                          <p className="mt-1.5 text-xs text-destructive">
+                            That number doesn't look right — check it and try again.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 <Button type="button" variant="secondary" onClick={() => setResult(null)}>
                   <RotateCcw />
@@ -277,17 +294,6 @@ function CustomerScreen() {
                 <Mic />
                 Try speaking again
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setResult(null);
-                  setTyping(true);
-                }}
-              >
-                <Keyboard />
-                Type instead
-              </Button>
             </div>
           </div>
         )}
@@ -305,37 +311,74 @@ function CustomerScreen() {
       </div>
 
       <div className="mx-auto mt-auto w-full max-w-lg pt-10">
-        {typing ? (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase">
+            <Keyboard className="size-3.5" />
+            Or type it instead
+          </p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
               if (!text.trim() || busy) return;
-              void process({ text: text.trim() });
+              void process({ text: text.trim(), phone: phone.trim() || undefined });
               setText("");
+              setShowSuggestions(false);
             }}
-            className="flex gap-2 rounded-xl border border-border bg-card p-2"
+            className="mt-3 space-y-2"
           >
+            <div className="relative">
+              <Input
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setShowSuggestions(false)}
+                placeholder="Try: Maggi noodles, Amul butter, brown bread…"
+                className="h-11"
+                aria-label="Product you couldn't find"
+              />
+              {showSuggestions && suggestions.length > 0 && (
+                <ul className="absolute inset-x-0 bottom-full z-10 mb-1 max-h-56 space-y-1 overflow-auto rounded-lg border border-border bg-card p-1 shadow-lg">
+                  {suggestions.map((s) => (
+                    <li key={s.name}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setText(s.name);
+                          setShowSuggestions(false);
+                        }}
+                        className="flex w-full items-baseline justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-secondary/60"
+                      >
+                        <span className="font-medium">{s.name}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase">
+                          {s.category}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <Input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-               placeholder="Try: I was looking for blue Gatorade"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Your WhatsApp number (optional) — e.g. 98765 43210"
+              inputMode="tel"
               className="h-11"
+              aria-label="WhatsApp number"
             />
-            <Button type="submit" disabled={busy || !text.trim()} className="h-11">
-              Send
+            <Button type="submit" disabled={busy || !text.trim()} className="h-11 w-full">
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Send />}
+              Send request
             </Button>
           </form>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setTyping(true)}
-            className="mx-auto flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            <Keyboard className="size-3.5" />
-            Can't speak right now? Type it instead
-          </Button>
-        )}
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+            Leave your number and the owner can WhatsApp you when it's stocked.
+          </p>
+        </div>
       </div>
     </main>
   );

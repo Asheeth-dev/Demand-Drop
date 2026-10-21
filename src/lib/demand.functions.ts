@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
+import { CATALOG, findExactCatalogMatch } from "@/lib/catalog";
+
 const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
 /**
@@ -46,6 +48,7 @@ async function extractProduct(transcript: string, apiKey: string) {
           role: "system",
           content:
             "You work for an Indian neighbourhood kirana shop. A customer says, in messy everyday speech (English, Hindi or Hinglish), which product they could not find. " +
+            "Prefer standard retail names from this known range when they fit: " + CATALOG.map((c) => c.name).join(", ") + ". " +
             "Return ONLY strict JSON: {\"product_name\":string,\"category\":string,\"confidence\":number}. " +
             "product_name must be the clean, standard retail name in English, Title Case, singular (e.g. 'Oatly' -> 'Oat Milk', 'blue sports drink' -> 'Blue Gatorade', 'atta wala brown bread' -> 'Brown Bread'). " +
             "category is one of: Dairy, Bakery, Beverages, Snacks, Staples, Personal Care, Household, Other. " +
@@ -146,9 +149,10 @@ async function notifyWaitingRows(ids: string[]) {
 
 /** Full pipeline: audio (or typed text) -> transcript -> product -> saved row. */
 export const submitDemand = createServerFn({ method: "POST" })
-  .inputValidator((input: { audioBase64?: string; mimeType?: string; text?: string }) => {
+  .inputValidator((input: { audioBase64?: string; mimeType?: string; text?: string; phone?: string }) => {
     // Validate before any AI call or database write.
     const text = typeof input.text === "string" ? input.text.slice(0, 500) : undefined;
+    const phone = typeof input.phone === "string" ? input.phone.trim().slice(0, 20) : undefined;
     const audioBase64 = typeof input.audioBase64 === "string" ? input.audioBase64 : undefined;
     if (audioBase64 && audioBase64.length > 8_000_000) {
       throw new Error("That recording is too long. Please keep it under a few seconds.");
@@ -157,10 +161,17 @@ export const submitDemand = createServerFn({ method: "POST" })
       typeof input.mimeType === "string" && input.mimeType.startsWith("audio/")
         ? input.mimeType
         : "audio/wav";
-    return { audioBase64, mimeType, text };
+    return { audioBase64, mimeType, text, phone };
   })
   .handler(async ({ data }) => {
     const apiKey = process.env["LOVABLE_API_KEY"]!;
+
+    // A WhatsApp number submitted with the request is validated up front so
+    // the owner can alert the customer the moment the item is stocked.
+    const customerPhone = data.phone ? normalizePhone(data.phone) : null;
+    if (data.phone && !customerPhone) {
+      throw new Error("That WhatsApp number doesn't look right. Please check it and try again.");
+    }
 
     let transcript = (data.text ?? "").trim();
     if (!transcript) {
@@ -170,7 +181,13 @@ export const submitDemand = createServerFn({ method: "POST" })
     if (!transcript) throw new Error("We couldn't hear anything. Please speak a little louder.");
     transcript = transcript.slice(0, 500);
 
-    const product = await extractProduct(transcript, apiKey);
+    // Exact typed matches to a known catalog name skip the LLM entirely so
+    // they can't be mangled; everything else gets extraction with the catalog
+    // as a grounding hint.
+    const exact = findExactCatalogMatch(transcript);
+    const product = exact
+      ? { product_name: exact.name, category: exact.category, confidence: 1 }
+      : await extractProduct(transcript, apiKey);
     if (product.product_name.toLowerCase() === "unclear") {
       return { ok: false as const, transcript, message: "We heard you, but couldn't identify a product." };
     }
@@ -183,6 +200,7 @@ export const submitDemand = createServerFn({ method: "POST" })
         product_name: product.product_name.slice(0, 80),
         category: product.category.slice(0, 40),
         confidence: product.confidence,
+        customer_phone: customerPhone,
       })
       .select()
       .single();
@@ -257,4 +275,23 @@ export const saveNotifyNumber = createServerFn({ method: "POST" })
       .eq("id", data.requestId);
     if (error) throw new Error(error.message);
     return { ok: true as const };
+  });
+
+/** Owner removes a product (all of its request rows) from the demand list. */
+export const deleteDemands = createServerFn({ method: "POST" })
+  .inputValidator((input: { ids: string[] }) => {
+    const ids = (Array.isArray(input.ids) ? input.ids : [])
+      .filter((id) => UUID_RE.test(id))
+      .slice(0, 500);
+    if (ids.length === 0) throw new Error("No requests selected.");
+    return { ids };
+  })
+  .handler(async ({ data }) => {
+    const db = await serverDb();
+    const { error, count } = await db
+      .from("demand_requests")
+      .delete()
+      .in("id", data.ids);
+    if (error) throw new Error(error.message);
+    return { ok: true as const, deleted: count ?? data.ids.length };
   });
