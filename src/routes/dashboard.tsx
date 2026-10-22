@@ -2,9 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { Loader2, MessageCircle, Mic, PackageSearch, Send, TrendingUp, Users } from "lucide-react";
+import { Loader2, MessageCircle, Mic, PackageSearch, Send, Trash2, TrendingUp, Users } from "lucide-react";
 
-import { listDemands, notifyDemandCustomers, setDemandStatus } from "@/lib/demand.functions";
+import { deleteDemands, listDemands, notifyDemandCustomers, setDemandStatus } from "@/lib/demand.functions";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/dashboard")({
@@ -60,6 +60,7 @@ function Dashboard() {
   const fetchRequests = useServerFn(listDemands);
   const updateStatus = useServerFn(setDemandStatus);
   const sendAlerts = useServerFn(notifyDemandCustomers);
+  const removeDemands = useServerFn(deleteDemands);
 
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ["demand_requests"],
@@ -102,6 +103,7 @@ function Dashboard() {
 
   const [notice, setNotice] = useState<string | null>(null);
   const [sendingProduct, setSendingProduct] = useState<string | null>(null);
+  const [removingProduct, setRemovingProduct] = useState<string | null>(null);
 
   async function setStatus(ids: string[], status: string) {
     try {
@@ -143,6 +145,28 @@ function Dashboard() {
       setNotice("The WhatsApp message couldn't be sent. Please try again.");
     } finally {
       setSendingProduct(null);
+    }
+  }
+
+  async function removeGroup(product: string, ids: string[]) {
+    if (removingProduct) return;
+    if (
+      !window.confirm(
+        `Remove ${ids.length === 1 ? "the request" : `all ${ids.length} requests`} for ${product} from the demand list? This can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setRemovingProduct(product);
+    setNotice(null);
+    try {
+      const res = await removeDemands({ data: { ids } });
+      setNotice(`Removed ${product} — ${res.deleted} request${res.deleted === 1 ? "" : "s"} cleared.`);
+      void qc.invalidateQueries({ queryKey: ["demand_requests"] });
+    } catch {
+      setNotice("The product couldn't be removed. Please try again.");
+    } finally {
+      setRemovingProduct(null);
     }
   }
 
@@ -208,7 +232,7 @@ function Dashboard() {
             <PackageSearch className="mx-auto size-8 text-muted-foreground" />
             <p className="mt-3 font-medium">No requests yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Open the counter screen and speak an item — it will appear here instantly.
+              Open the counter screen and speak or type an item — it will appear here instantly.
             </p>
             <Button asChild className="mt-4">
               <Link to="/">Open counter screen</Link>
@@ -260,7 +284,7 @@ function Dashboard() {
                     type="button"
                     size="sm"
                     onClick={() => void notifyCustomers(g.product, g.waitingContacts.map((contact) => contact.id))}
-                    disabled={sendingProduct !== null}
+                    disabled={sendingProduct !== null || removingProduct !== null}
                     className="shrink-0"
                   >
                     {sendingProduct === g.product ? (
@@ -271,6 +295,22 @@ function Dashboard() {
                     Send WhatsApp
                   </Button>
                 )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void removeGroup(g.product, g.ids)}
+                  disabled={removingProduct !== null}
+                  className="shrink-0 text-destructive"
+                  aria-label={`Remove ${g.product} from the demand list`}
+                >
+                  {removingProduct === g.product ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Trash2 />
+                  )}
+                  Remove
+                </Button>
               </li>
             ))}
           </ul>
