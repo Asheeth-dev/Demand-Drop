@@ -320,7 +320,8 @@ function CustomerScreen() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!text.trim() || busy) return;
-              void process({ text: text.trim(), phone: phone.trim() || undefined });
+              const phoneValue = phone.trim();
+              void process(phoneValue ? { text: text.trim(), phone: phoneValue } : { text: text.trim() });
               setText("");
               setShowSuggestions(false);
             }}
