@@ -50,6 +50,42 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_items: {
+        Row: {
+          brand: string | null
+          category: string
+          created_at: string
+          id: string
+          price: number | null
+          product_name: string
+          stock: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          brand?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          price?: number | null
+          product_name: string
+          stock?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          brand?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          price?: number | null
+          product_name?: string
+          stock?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
