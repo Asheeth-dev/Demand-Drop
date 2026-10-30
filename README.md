@@ -33,6 +33,7 @@ No app install, no login, no training. One button.
 | 🎤 One-tap voice capture | Web Audio recording with live level meter; falls back to typing |
 | 🌏 Multilingual AI | Transcription + product extraction tuned for English / Hindi / Hinglish kirana speech |
 | 🧹 Smart normalisation | Messy speech → clean retail name + category (`Dairy`, `Bakery`, `Beverages`, `Snacks`, `Staples`, `Personal Care`, `Household`) |
+| 🛒 600+ product catalog | Built from the **Open Food Facts** open product database (25,000+ community-contributed Indian products, filtered to the cleanest entries) plus curated personal-care, household, pharmacy-counter and stationery items — powers autocomplete and teaches the AI the shop's real product names |
 | 📊 Demand-ranked dashboard | Products grouped and sorted by request count, with solid status badges: **New** (white), **Ordering now** (yellow), **Just stocked** (green), **Ignored** (red) — all with black text |
 | 📱 Visible waiting contacts | Each product shows the WhatsApp numbers of customers still waiting for its stock alert |
 | 💬 WhatsApp stock alerts | Send automatically when marked **Just stocked**, or manually with the per-product **Send WhatsApp** button; each customer is notified once |
@@ -67,6 +68,8 @@ WhatsApp Cloud API ── template message to each waiting customer
 ```
 
 **Security model:** the `demand_requests` table has RLS enabled with *no* client policies — every read and write flows through validated server functions (`submitDemand`, `listDemands`, `setDemandStatus`, `saveNotifyNumber`, `notifyDemandCustomers`). Phone numbers are normalised to WhatsApp's international format and validated server-side. Manual sends accept only validated request IDs and are limited to 200 recipients per action.
+
+**Product catalog:** `src/lib/catalog.ts` holds 600+ real Indian retail products — a curated core plus an extended list sourced from the Open Food Facts open database, covering snacks, staples, beverages, dairy, bakery, personal care, household, and pharmacy-counter items. Customers get live suggestions as they type, exact catalog matches skip the AI entirely (so typed names can't be mangled), and the catalog also grounds the AI extraction so messy speech maps to standard retail names.
 
 ## Owner Dashboard Workflow
 
@@ -118,6 +121,7 @@ src/
 │   └── __root.tsx         # App shell
 ├── lib/
 │   ├── demand.functions.ts  # Server functions: AI pipeline, DB, WhatsApp send
+│   ├── catalog.ts           # 600+ Indian product catalog (Open Food Facts + curated core)
 │   └── useRecorder.ts       # Microphone hook (Web Audio)
 └── integrations/supabase/   # Generated client + types
 supabase/migrations/         # demand_requests schema + RLS lockdown
