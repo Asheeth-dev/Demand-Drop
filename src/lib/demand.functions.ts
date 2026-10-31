@@ -185,9 +185,18 @@ export const submitDemand = createServerFn({ method: "POST" })
     // they can't be mangled; everything else gets extraction with the catalog
     // as a grounding hint.
     const exact = findExactCatalogMatch(transcript);
+    const inventoryExact = exact
+      ? null
+      : await import("@/lib/inventory.server").then((m) => m.findInventoryExact(transcript));
     const product = exact
       ? { product_name: exact.name, category: exact.category, confidence: 1 }
-      : await extractProduct(transcript, apiKey);
+      : inventoryExact
+        ? {
+            product_name: inventoryExact.product_name,
+            category: inventoryExact.category,
+            confidence: 1,
+          }
+        : await extractProduct(transcript, apiKey);
     if (product.product_name.toLowerCase() === "unclear") {
       return { ok: false as const, transcript, message: "We heard you, but couldn't identify a product." };
     }
