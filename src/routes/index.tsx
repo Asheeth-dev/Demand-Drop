@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   Mic,
@@ -17,6 +18,7 @@ import {
 
 import { submitDemand, saveNotifyNumber } from "@/lib/demand.functions";
 import { suggestCatalogProducts } from "@/lib/catalog";
+import { listPublicInventory } from "@/lib/inventory.functions";
 import { blobToBase64, useRecorder } from "@/lib/useRecorder";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,8 +66,33 @@ function CustomerScreen() {
   const [phoneState, setPhoneState] = useState<"idle" | "saving" | "saved" | "invalid">("idle");
   const send = useServerFn(submitDemand);
   const saveNumber = useServerFn(saveNotifyNumber);
+  const fetchInventory = useServerFn(listPublicInventory);
 
-  const suggestions = suggestCatalogProducts(text);
+  // The supplier's live inventory feeds the customer suggestions.
+  const { data: inventory } = useQuery({
+    queryKey: ["public-inventory"],
+    queryFn: () => fetchInventory(),
+    staleTime: 30_000,
+  });
+
+  const q = text.trim().toLowerCase();
+  const inventorySuggestions = q
+    ? (inventory ?? [])
+        .filter((i) => `${i.product_name} ${i.brand ?? ""}`.toLowerCase().includes(q))
+        .slice(0, 4)
+        .map((i) => ({
+          name: i.product_name,
+          category: i.category,
+          inv: { price: i.price as number | null, stock: i.stock as number },
+        }))
+    : [];
+  const seenNames = new Set(inventorySuggestions.map((s) => s.name.toLowerCase()));
+  const suggestions = [
+    ...inventorySuggestions,
+    ...suggestCatalogProducts(text)
+      .filter((s) => !seenNames.has(s.name.toLowerCase()))
+      .map((s) => ({ name: s.name, category: s.category })),
+  ].slice(0, 6);
 
   async function handleSavePhone(requestId: string) {
     if (!phone.trim() || phoneState === "saving") return;
@@ -136,13 +163,22 @@ function CustomerScreen() {
           <p className="font-display text-lg font-bold">DemandDrop</p>
           <p className="mt-0.5 text-xs text-muted-foreground">Sharma General Store · Customer counter</p>
         </div>
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
-        >
-          <LayoutDashboard className="size-3.5" />
-          Owner
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/supplier"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <Warehouse className="size-3.5" />
+            Supplier
+          </Link>
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <LayoutDashboard className="size-3.5" />
+            Owner
+          </Link>
+        </div>
       </header>
 
       <div className="mx-auto mt-10 max-w-xl text-center sm:mt-14">
@@ -354,8 +390,14 @@ function CustomerScreen() {
                         className="flex w-full items-baseline justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-secondary/60"
                       >
                         <span className="font-medium">{s.name}</span>
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase">
-                          {s.category}
+                        <span className="shrink-0 text-[10px] font-semibold text-muted-foreground uppercase">
+                          {s.inv
+                            ? s.inv.price != null
+                              ? `₹${s.inv.price} · ${s.inv.stock > 0 ? "In stock" : "Out of stock"}`
+                              : s.inv.stock > 0
+                                ? "In stock"
+                                : "Out of stock"
+                            : s.category}
                         </span>
                       </button>
                     </li>
