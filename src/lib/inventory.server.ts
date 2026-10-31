@@ -6,31 +6,40 @@ import type { Database } from "@/integrations/supabase/types";
  * file so it never ships to the client bundle.
  */
 
-/** Public read-only client: the inventory table is readable by anyone (anon SELECT policy). */
-export function createPublicInventoryClient() {
+/** Public read-only client: the inventory table has a public anon SELECT policy. */
+function createPublicInventoryClient() {
   const url = process.env["SUPABASE_URL"]!;
   const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
-  const client = createClient<Database>(url, key, {
+  return createClient<Database>(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      // Opaque sb_ keys aren't JWTs; PostgREST needs apikey, not a Bearer header.
+      fetch: (input, init) => {
+        const headers = new Headers(init?.headers);
+        if (key.startsWith("sb_") && headers.get("Authorization") === `Bearer ${key}`) {
+          headers.delete("Authorization");
+        }
+        headers.set("apikey", key);
+        return fetch(input, { ...init, headers });
+      },
+    },
   });
-  // Opaque sb_ keys aren't JWTs; PostgREST needs apikey, not a Bearer header.
-  const fetchShim = (input: RequestInfo | URL, init?: RequestInit) => {
-    const headers = new Headers(init?.headers);
-    if (key.startsWith("sb_") && headers.get("Authorization") === `Bearer ${key}`) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", key);
-    return fetch(input, { ...init, headers });
-  };
-  client.rest = new Proxy(client.rest, {});
-  // Simplest reliable shim: wrap the client's postgrest by replacing `from`.
-  const origFrom = client.from.bind(client);
-  (client as unknown as { from: typeof origFrom }).from = (relation: string) => {
-    const builder = origFrom(relation);
-    // Re-issue through the shim by patching fetch on the builder chain is not
-    // exposed; instead replace global fetch per call via the builder's `abort`
-    // is overkill — use the headers override below.
-    return builder;
-  };
-  return client;
+}
+
+/**
+ * Exact typed match against the supplier's live inventory, used by the demand
+ * fast path so a typed product name that exists in stock can't be mangled by
+ * the LLM. Escapes LIKE wildcards in the transcript first.
+ */
+export async function findInventoryExact(transcript: string) {
+  const client = createPublicInventoryClient();
+  const needle = transcript.trim().replace(/[%_\\]/g, "\\$&");
+  if (!needle) return null;
+  const { data, error } = await client
+    .from("inventory_items")
+    .select("product_name, category")
+    .ilike("product_name", needle)
+    .limit(1);
+  if (error) return null;
+  return data?.[0] ?? null;
 }
