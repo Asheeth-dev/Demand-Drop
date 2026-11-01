@@ -88,7 +88,8 @@ function CustomerScreen() {
         }))
     : [];
   const seenNames = new Set(inventorySuggestions.map((s) => s.name.toLowerCase()));
-  const suggestions = [
+  type Suggestion = { name: string; category: string; inv?: { price: number | null; stock: number } };
+  const suggestions: Suggestion[] = [
     ...inventorySuggestions,
     ...suggestCatalogProducts(text)
       .filter((s) => !seenNames.has(s.name.toLowerCase()))
