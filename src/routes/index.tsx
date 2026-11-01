@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Keyboard,
   LayoutDashboard,
+  Warehouse,
   ArrowRight,
   RotateCcw,
   Send,
