@@ -48,6 +48,7 @@ No app install, no login, no training. One button.
 - **Backend:** Lovable Cloud (Supabase Postgres, Row Level Security, server functions via `createServerFn`)
 - **AI:** Lovable AI Gateway — `google/gemini-3.5-transcribe` (speech-to-text) + `google/gemini-3.8-flash` (structured product extraction)
 - **Messaging:** Meta WhatsApp Cloud API (`graph.facebook.com/v21.0`)
+- **Auth:** Google sign-in via Lovable Cloud's managed OAuth broker (Supabase Auth)
 
 ## Architecture
 
@@ -70,6 +71,8 @@ WhatsApp Cloud API ── template message to each waiting customer
 
 **Security model:** the `demand_requests` table has RLS enabled with *no* client policies — every read and write flows through validated server functions (`submitDemand`, `listDemands`, `setDemandStatus`, `saveNotifyNumber`, `notifyDemandCustomers`). Phone numbers are normalised to WhatsApp's international format and validated server-side. Manual sends accept only validated request IDs and are limited to 200 recipients per action.
 
+**Supplier & inventory:** suppliers sign in with Google at `/auth` and manage stock at `/supplier`, protected by a client-only auth gate. The `inventory_items` table is publicly readable — names, prices and stock are exactly what customers see — but every write policy is scoped to the signed-in supplier (`auth.uid() = user_id`), and all inventory server functions (`listMyInventory`, `saveInventoryItem`, `deleteInventoryItem`) require an authenticated session validated server-side.
+
 **Product catalog:** `src/lib/catalog.ts` holds 600+ real Indian retail products — a curated core plus an extended list sourced from the Open Food Facts open database, covering snacks, staples, beverages, dairy, bakery, personal care, household, and pharmacy-counter items. Customers get live suggestions as they type, exact catalog matches skip the AI entirely (so typed names can't be mangled), and the catalog also grounds the AI extraction so messy speech maps to standard retail names.
 
 ## Owner Dashboard Workflow
@@ -83,6 +86,13 @@ WhatsApp Cloud API ── template message to each waiting customer
    - **Ignored** — badge turns red with black text.
 4. Alternatively, press **Send WhatsApp** beside any product to alert its waiting customers directly.
 5. The dashboard reports how many messages succeeded or failed, then removes successfully notified contacts from the waiting list.
+
+## Supplier Workflow
+
+1. Open `/supplier` (or tap **Supplier** on the customer page) and sign in with Google.
+2. Add a product with its name, brand, category, price and stock — or edit or remove any row later.
+3. Every stocked item instantly appears in the customer's autocomplete with a price and **In stock / Out of stock** badge.
+4. When a customer types a product name that matches live stock exactly, it's registered verbatim — the AI never mangles it.
 
 ## Running Locally
 
@@ -117,15 +127,19 @@ The WhatsApp template body expects one `{{1}}` parameter (the product name), e.g
 ```text
 src/
 ├── routes/
-│   ├── index.tsx          # Customer screen: mic, text fallback, WhatsApp opt-in
-│   ├── dashboard.tsx      # Owner dashboard: demand ranking, status, alerts
-│   └── __root.tsx         # App shell
+│   ├── index.tsx            # Customer screen: mic, text fallback, WhatsApp opt-in
+│   ├── dashboard.tsx        # Owner dashboard: demand ranking, status, alerts
+│   ├── auth.tsx             # Google sign-in for suppliers
+│   ├── _authenticated/      # Client-only auth gate (redirects to /auth)
+│   │   └── supplier.tsx     # Supplier inventory: products, prices, stock
+│   └── __root.tsx           # App shell
 ├── lib/
-│   ├── demand.functions.ts  # Server functions: AI pipeline, DB, WhatsApp send
-│   ├── catalog.ts           # 600+ Indian product catalog (Open Food Facts + curated core)
-│   └── useRecorder.ts       # Microphone hook (Web Audio)
+│   ├── demand.functions.ts    # Server functions: AI pipeline, DB, WhatsApp send
+│   ├── inventory.functions.ts # Server functions: supplier inventory CRUD + public read
+│   ├── catalog.ts             # 600+ Indian product catalog (Open Food Facts + curated core)
+│   └── useRecorder.ts         # Microphone hook (Web Audio)
 └── integrations/supabase/   # Generated client + types
-supabase/migrations/         # demand_requests schema + RLS lockdown
+supabase/migrations/         # demand_requests + inventory_items schema, RLS
 ```
 
 ## Hackathon Highlights
@@ -133,6 +147,7 @@ supabase/migrations/         # demand_requests schema + RLS lockdown
 - **Real problem, real scale:** 12M+ kirana stores; zero training or literacy required.
 - **AI where it matters:** not a chatbot gimmick — AI converts chaotic multilingual speech into *structured, actionable inventory data*.
 - **Closed revenue loop:** doesn't just record demand — it brings the customer back, measurably, via WhatsApp.
+- **Live two-sided inventory:** suppliers push real products, prices and stock; customers see them the same second, and exact typed stock matches bypass AI entirely.
 - **Demo in 10 seconds:** tap mic → speak → add a WhatsApp number → watch the dashboard update → click **Send WhatsApp** or mark **Just stocked** → alert fires.
 
 ## Roadmap
