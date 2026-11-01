@@ -2,7 +2,7 @@
 
 **Voice-powered demand tracking for India's small merchants .**
 
-DemandDrop closes the gap between what customers ask for and what a neighbourhood shop stocks. A customer walks in, can't find a product, taps one button, and *says* what they wanted — in English, Hindi, or Hinglish. AI turns that messy sentence into a clean, structured stock request on the owner's dashboard. When the owner restocks the item and flips its status to **Just stocked**, every customer who left their number gets a WhatsApp message: *"Good news! It's back in stock."*
+DemandDrop closes the gap between what customers ask for and what a neighbourhood shop stocks. A customer walks in, can't find a product, taps one button, and *says* what they wanted — in English, Hindi, or Hinglish. AI turns that messy sentence into a clean, structured stock request on the owner's dashboard. The supplier signs in with Google to load their own inventory — products, prices and stock — which feeds the customer suggestions and the demand fast path. When the owner restocks the item and flips its status to **Just stocked**, every customer who left their number gets a WhatsApp message: *"Good news! It's back in stock."*
 
 ---
 
@@ -38,6 +38,7 @@ No app install, no login, no training. One button.
 | 📱 Visible waiting contacts | Each product shows the WhatsApp numbers of customers still waiting for its stock alert |
 | 💬 WhatsApp stock alerts | Send automatically when marked **Just stocked**, or manually with the per-product **Send WhatsApp** button; each customer is notified once |
 | 🔒 Locked-down data | All database access is server-side; the browser has zero direct table access |
+| 🏪 Supplier inventory | Suppliers sign in with **Google** and manage their own products, prices and stock; stocked items appear instantly in the customer's autocomplete with a price and in-stock badge, and an exact typed match against live stock skips the AI |
 
 ## Tech Stack
 
@@ -58,11 +59,11 @@ submitDemand (server function)
    ├── Gemini transcription      → transcript
    ├── Gemini product extraction → { product_name, category, confidence }
    ▼
-Postgres: demand_requests  (RLS locked, service-role only)
+Postgres: demand_requests  (RLS locked, service-role only)      Postgres: inventory_items (public read, owner-scoped writes)
    ▲
-Owner dashboard ── polls listDemands every 2s
-   │  "Just stocked" or "Send WhatsApp"
-   ▼
+Owner dashboard ── polls listDemands every 2s        Supplier dashboard (/supplier, Google sign-in)
+   │  "Just stocked" or "Send WhatsApp"                │  products, prices, stock
+   ▼                                                   ▼
 WhatsApp Cloud API ── template message to each waiting customer
    └── notified_at stamped so nobody is messaged twice
 ```
