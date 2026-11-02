@@ -93,14 +93,21 @@ function SupplierPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
-        id: editingId ?? undefined,
+      const payload: {
+        id?: string;
+        productName: string;
+        brand?: string;
+        category: string;
+        price: number | null;
+        stock: number;
+      } = {
         productName: productName.trim(),
-        brand: brand.trim() || undefined,
         category,
         price: price.trim() === "" ? null : Number(price),
         stock: Number(stock || 0),
       };
+      if (brand.trim()) payload.brand = brand.trim();
+      if (editingId) payload.id = editingId;
       return saveFn({ data: payload });
     },
     onSuccess: () => {
