@@ -29,6 +29,13 @@
       "when": 1793340910584,
       "tag": "0003_create_inventory_items",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793595860128,
+      "tag": "0004_create_supplier_profiles",
+      "breakpoints": true
     }
   ]
 }

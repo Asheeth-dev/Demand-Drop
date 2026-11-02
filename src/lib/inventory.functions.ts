@@ -106,12 +106,23 @@ export const deleteInventoryItem = createServerFn({ method: "POST" })
 
 /** Public read for the customer page: every inventory item, prices and stock included. */
 export const listPublicInventory = createServerFn({ method: "GET" }).handler(async () => {
+  const supabasePublic = createPublicDataClient();
+  const { data, error } = await supabasePublic
+    .from("inventory_items")
+    .select("id, product_name, brand, category, price, stock")
+    .order("product_name", { ascending: true })
+    .limit(300);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+});
+
+/** Publishable-key client for public reads (opaque sb_ keys need apikey, not Bearer). */
+function createPublicDataClient() {
   const url = process.env["SUPABASE_URL"]!;
   const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
-  const supabasePublic = createClient<Database>(url, key, {
+  return createClient<Database>(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
-      // Opaque sb_ keys aren't JWTs; send apikey, not a Bearer header.
       fetch: (input, init) => {
         const headers = new Headers(init?.headers);
         if (key.startsWith("sb_") && headers.get("Authorization") === `Bearer ${key}`) {
@@ -122,11 +133,74 @@ export const listPublicInventory = createServerFn({ method: "GET" }).handler(asy
       },
     },
   });
-  const { data, error } = await supabasePublic
-    .from("inventory_items")
-    .select("id, product_name, brand, category, price, stock")
-    .order("product_name", { ascending: true })
-    .limit(300);
-  if (error) throw new Error(error.message);
-  return data ?? [];
+}
+
+/**
+ * Owner view of supplier stock: every supplier's inventory grouped by supplier
+ * with their store name. Public read, like the dashboard — the table has an
+ * anon SELECT policy.
+ */
+export const listSupplierInventory = createServerFn({ method: "GET" }).handler(async () => {
+  const supabasePublic = createPublicDataClient();
+  const [itemsRes, profilesRes] = await Promise.all([
+    supabasePublic
+      .from("inventory_items")
+      .select("user_id, product_name, brand, category, price, stock")
+      .order("product_name", { ascending: true })
+      .limit(1000),
+    supabasePublic.from("supplier_profiles").select("user_id, store_name"),
+  ]);
+  if (itemsRes.error) throw new Error(itemsRes.error.message);
+  if (profilesRes.error) throw new Error(profilesRes.error.message);
+
+  const storeNames = new Map(
+    (profilesRes.data ?? []).map((p: { user_id: string; store_name: string }) => [p.user_id, p.store_name]),
+  );
+  const groups = new Map<
+    string,
+    { userId: string; storeName: string; itemCount: number; items: (typeof itemsRes.data[number])[] }
+  >();
+  for (const item of itemsRes.data ?? []) {
+    const group = groups.get(item.user_id) ?? {
+      userId: item.user_id,
+      storeName: storeNames.get(item.user_id) ?? "Supplier",
+      itemCount: 0,
+      items: [],
+    };
+    group.items.push(item);
+    group.itemCount += 1;
+    groups.set(item.user_id, group);
+  }
+  return [...groups.values()].sort((a, b) => b.itemCount - a.itemCount);
 });
+
+/** The signed-in supplier's store name, shown on the owner's supplier-stock view. */
+export const getMySupplierProfile = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("supplier_profiles")
+      .select("store_name")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return { storeName: data?.store_name ?? null };
+  });
+
+export const saveSupplierProfile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { storeName: string }) => {
+    const storeName = String(input.storeName ?? "").trim().slice(0, 60);
+    if (!storeName) throw new Error("Store name is required.");
+    return { storeName };
+  })
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("supplier_profiles")
+      .upsert(
+        { user_id: context.userId, store_name: data.storeName, updated_at: new Date().toISOString() },
+        { onConflict: "user_id" },
+      );
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });

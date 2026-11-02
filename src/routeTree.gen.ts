@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as CounterRouteImport } from './routes/counter'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as SuppliersRouteImport } from './routes/suppliers'
 import { Route as AuthenticatedSupplierRouteImport } from './routes/_authenticated/supplier'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,9 +31,19 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CounterRoute = CounterRouteImport.update({
+  id: '/counter',
+  path: '/counter',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SuppliersRoute = SuppliersRouteImport.update({
+  id: '/suppliers',
+  path: '/suppliers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedSupplierRoute = AuthenticatedSupplierRouteImport.update({
@@ -43,13 +55,17 @@ const AuthenticatedSupplierRoute = AuthenticatedSupplierRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/counter': typeof CounterRoute
   '/dashboard': typeof DashboardRoute
+  '/suppliers': typeof SuppliersRoute
   '/supplier': typeof AuthenticatedSupplierRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/counter': typeof CounterRoute
   '/dashboard': typeof DashboardRoute
+  '/suppliers': typeof SuppliersRoute
   '/supplier': typeof AuthenticatedSupplierRoute
 }
 export interface FileRoutesById {
@@ -57,20 +73,25 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/counter': typeof CounterRoute
   '/dashboard': typeof DashboardRoute
+  '/suppliers': typeof SuppliersRoute
   '/_authenticated/supplier': typeof AuthenticatedSupplierRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/dashboard' | '/supplier'
+  fullPaths:
+    '/' | '/auth' | '/counter' | '/dashboard' | '/suppliers' | '/supplier'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dashboard' | '/supplier'
+  to: '/' | '/auth' | '/counter' | '/dashboard' | '/suppliers' | '/supplier'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/counter'
     | '/dashboard'
+    | '/suppliers'
     | '/_authenticated/supplier'
   fileRoutesById: FileRoutesById
 }
@@ -78,7 +99,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  CounterRoute: typeof CounterRoute
   DashboardRoute: typeof DashboardRoute
+  SuppliersRoute: typeof SuppliersRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -104,11 +127,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/counter': {
+      id: '/counter'
+      path: '/counter'
+      fullPath: '/counter'
+      preLoaderRoute: typeof CounterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/suppliers': {
+      id: '/suppliers'
+      path: '/suppliers'
+      fullPath: '/suppliers'
+      preLoaderRoute: typeof SuppliersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/supplier': {
@@ -136,7 +173,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  CounterRoute: CounterRoute,
   DashboardRoute: DashboardRoute,
+  SuppliersRoute: SuppliersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
