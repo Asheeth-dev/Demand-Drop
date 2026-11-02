@@ -157,6 +157,15 @@
   --success-foreground: oklch(0.13 0.02 155);
   --warning: oklch(0.79 0.15 82);
   --warning-foreground: oklch(0.17 0.02 75);
+  --cat-dairy: oklch(0.8 0.1 230);
+  --cat-bakery: oklch(0.8 0.11 70);
+  --cat-beverages: oklch(0.78 0.12 195);
+  --cat-snacks: oklch(0.75 0.15 45);
+  --cat-staples: oklch(0.78 0.13 140);
+  --cat-personal: oklch(0.78 0.12 340);
+  --cat-household: oklch(0.72 0.12 290);
+  --cat-other: oklch(0.65 0.02 250);
+  --badge-foreground: oklch(0.13 0.015 250);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
