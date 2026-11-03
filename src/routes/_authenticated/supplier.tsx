@@ -8,6 +8,7 @@ import {
   Package,
   Pencil,
   Plus,
+  Store,
   Trash2,
   Warehouse,
   X,
@@ -18,9 +19,12 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import {
   deleteInventoryItem,
+  getMySupplierProfile,
   listMyInventory,
   saveInventoryItem,
+  saveSupplierProfile,
 } from "@/lib/inventory.functions";
+import { CATEGORIES, categoryStyle, stockBadge } from "@/lib/inventory-ui";
 import { suggestCatalogProducts } from "@/lib/catalog";
 
 export const Route = createFileRoute("/_authenticated/supplier")({
@@ -43,17 +47,6 @@ export const Route = createFileRoute("/_authenticated/supplier")({
   component: SupplierPage,
 });
 
-const CATEGORIES = [
-  "Dairy",
-  "Bakery",
-  "Beverages",
-  "Snacks",
-  "Staples",
-  "Personal Care",
-  "Household",
-  "Other",
-] as const;
-
 type InventoryRow = {
   id: string;
   product_name: string;
@@ -70,6 +63,8 @@ function SupplierPage() {
   const listFn = useServerFn(listMyInventory);
   const saveFn = useServerFn(saveInventoryItem);
   const removeFn = useServerFn(deleteInventoryItem);
+  const getProfileFn = useServerFn(getMySupplierProfile);
+  const saveProfileFn = useServerFn(saveSupplierProfile);
 
   const [email, setEmail] = useState<string | null>(null);
 
@@ -80,6 +75,27 @@ function SupplierPage() {
   const inventoryQuery = useQuery<InventoryRow[]>({
     queryKey: ["my-inventory"],
     queryFn: () => listFn(),
+  });
+
+  const profileQuery = useQuery<{ storeName: string | null }>({
+    queryKey: ["my-supplier-profile"],
+    queryFn: () => getProfileFn(),
+  });
+
+  const [storeName, setStoreName] = useState("");
+  const [storeNotice, setStoreNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (profileQuery.data?.storeName) setStoreName(profileQuery.data.storeName);
+  }, [profileQuery.data?.storeName]);
+
+  const saveProfileMutation = useMutation({
+    mutationFn: async () => saveProfileFn({ data: { storeName: storeName.trim() } }),
+    onSuccess: () => {
+      setStoreNotice("Store name saved — the shop owner sees it on their supplier stock view.");
+      void queryClient.invalidateQueries({ queryKey: ["my-supplier-profile"] });
+    },
+    onError: (e: Error) => setStoreNotice(e.message),
   });
 
   // Add / update form state
@@ -163,7 +179,7 @@ function SupplierPage() {
       <header className="flex items-center justify-between border-b border-border py-4">
         <div>
           <p className="flex items-center gap-2 text-lg font-extrabold tracking-tight">
-            <Warehouse className="size-5" />
+            <Warehouse className="size-5 text-primary" />
             Supplier inventory
           </p>
           <p className="text-xs text-muted-foreground">{email ?? "Signed in"}</p>
@@ -181,6 +197,47 @@ function SupplierPage() {
           </Button>
         </div>
       </header>
+
+      {/* Store name — shown on the owner's supplier stock view */}
+      <section className="mt-6 rounded-xl border border-border bg-card p-4">
+        <p className="flex items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
+          <Store className="size-3.5" />
+          Your store name
+        </p>
+        <form
+          className="mt-3 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!storeName.trim() || saveProfileMutation.isPending) return;
+            saveProfileMutation.mutate();
+          }}
+        >
+          <Input
+            value={storeName}
+            onChange={(e) => {
+              setStoreName(e.target.value);
+              setStoreNotice(null);
+            }}
+            placeholder="e.g. Sri Balaji Distributors"
+            className="h-10"
+            aria-label="Your store name"
+            maxLength={60}
+          />
+          <Button
+            type="submit"
+            variant="secondary"
+            disabled={saveProfileMutation.isPending || !storeName.trim()}
+            className="h-10 shrink-0"
+          >
+            {saveProfileMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Check />}
+            Save
+          </Button>
+        </form>
+        {storeNotice && <p className="mt-2 text-xs text-success">{storeNotice}</p>}
+        <p className="mt-2 text-xs text-muted-foreground">
+          The shop owner sees this name above everything you stock.
+        </p>
+      </section>
 
       {/* Add / edit form */}
       <section className="mt-6 rounded-xl border border-border bg-card p-4">
@@ -239,10 +296,10 @@ function SupplierPage() {
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               aria-label="Category"
-              className="h-11 rounded-md border border-input bg-transparent px-3 text-sm"
+              className={`h-11 rounded-md border border-black/20 px-3 text-sm font-semibold ${categoryStyle(category)}`}
             >
               {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
+                <option key={c} value={c} className="bg-popover text-foreground">
                   {c}
                 </option>
               ))}
@@ -309,51 +366,58 @@ function SupplierPage() {
           </div>
         ) : (
           <ul className="mt-3 space-y-2">
-            {items.map((item) => (
-              <li key={item.id} className="rounded-xl border border-border bg-card p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{item.product_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.brand ? `${item.brand} · ` : ""}
-                      {item.category}
-                      {item.price != null ? ` · ₹${item.price}` : ""}
-                    </p>
+            {items.map((item) => {
+              const stock = stockBadge(item.stock);
+              return (
+                <li key={item.id} className="rounded-xl border border-border bg-card p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{item.product_name}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${categoryStyle(item.category)}`}
+                        >
+                          {item.category}
+                        </span>
+                        {item.brand && <span className="text-xs text-muted-foreground">{item.brand}</span>}
+                        {item.price != null && (
+                          <span className="font-mono text-xs font-semibold text-primary">₹{item.price}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => startEdit(item)}
+                        aria-label={`Edit ${item.product_name}`}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive"
+                        disabled={removeMutation.isPending}
+                        onClick={() => removeMutation.mutate(item.id)}
+                        aria-label={`Remove ${item.product_name}`}
+                      >
+                        {removeMutation.isPending ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => startEdit(item)}
-                      aria-label={`Edit ${item.product_name}`}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive"
-                      disabled={removeMutation.isPending}
-                      onClick={() => removeMutation.mutate(item.id)}
-                      aria-label={`Remove ${item.product_name}`}
-                    >
-                      {removeMutation.isPending ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-                <p className="mt-1 text-xs font-medium">
-                  {item.stock > 0 ? (
-                    <span className="text-success">{item.stock} in stock</span>
-                  ) : (
-                    <span className="text-destructive">Out of stock</span>
-                  )}
-                </p>
-              </li>
-            ))}
+                  <p className="mt-2">
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${stock.className}`}>
+                      {stock.label}
+                    </span>
+                  </p>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

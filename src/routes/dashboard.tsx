@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { Loader2, MessageCircle, Mic, PackageSearch, Send, Trash2, TrendingUp, Users } from "lucide-react";
+import { Loader2, MessageCircle, Mic, PackageSearch, Send, Trash2, TrendingUp, Users, Warehouse } from "lucide-react";
 
 import { deleteDemands, listDemands, notifyDemandCustomers, setDemandStatus } from "@/lib/demand.functions";
 import { Button } from "@/components/ui/button";
@@ -181,13 +181,22 @@ function Dashboard() {
           <p className="font-display text-lg font-bold">DemandDrop</p>
           <p className="mt-0.5 text-xs text-muted-foreground">Sharma General Store · Owner view</p>
         </div>
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
-        >
-          <Mic className="size-3.5" />
-          Counter screen
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/suppliers"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <Warehouse className="size-3.5" />
+            Supplier stock
+          </Link>
+          <Link
+            to="/counter"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <Mic className="size-3.5" />
+            Counter screen
+          </Link>
+        </div>
       </header>
 
       <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
@@ -235,7 +244,7 @@ function Dashboard() {
               Open the counter screen and speak or type an item — it will appear here instantly.
             </p>
             <Button asChild className="mt-4">
-              <Link to="/">Open counter screen</Link>
+              <Link to="/counter">Open counter screen</Link>
             </Button>
           </div>
         ) : (
