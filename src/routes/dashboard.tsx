@@ -1,10 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
-import { Loader2, MessageCircle, Mic, PackageSearch, Send, Trash2, TrendingUp, Users, Warehouse } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  BellRing,
+  Clock,
+  Info,
+  Loader2,
+  MessageCircle,
+  Mic,
+  PackageSearch,
+  Search,
+  Send,
+  Store,
+  Trash2,
+  TrendingUp,
+  Users,
+  Warehouse,
+} from "lucide-react";
 
 import { deleteDemands, listDemands, notifyDemandCustomers, setDemandStatus } from "@/lib/demand.functions";
+import { AppShell } from "@/components/app-shell";
+import { categoryStyle } from "@/lib/inventory-ui";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/dashboard")({
@@ -54,6 +71,29 @@ const STATUS_STYLE: Record<string, string> = {
   stocked: "bg-success text-black",
   ignored: "bg-destructive text-black",
 };
+const STATUS_CHART_COLOR: Record<string, string> = {
+  new: "var(--color-chart-1)",
+  ordering: "var(--color-chart-4)",
+  stocked: "var(--color-chart-3)",
+  ignored: "var(--color-chart-5)",
+};
+
+const NAV_SECTIONS = [
+  {
+    label: "General",
+    items: [
+      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
+      { to: "/counter", label: "Counter screen", icon: Mic },
+    ],
+  },
+  {
+    label: "Tools",
+    items: [{ to: "/suppliers", label: "Supplier stock", icon: Warehouse, dot: true }],
+  },
+] as const;
+
+// tiny alias so the sections array above can reference the lucide icon directly
+import { LayoutDashboard as LayoutDashboardIcon } from "lucide-react";
 
 function Dashboard() {
   const qc = useQueryClient();
@@ -61,6 +101,11 @@ function Dashboard() {
   const updateStatus = useServerFn(setDemandStatus);
   const sendAlerts = useServerFn(notifyDemandCustomers);
   const removeDemands = useServerFn(deleteDemands);
+
+  const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [sendingProduct, setSendingProduct] = useState<string | null>(null);
+  const [removingProduct, setRemovingProduct] = useState<string | null>(null);
 
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ["demand_requests"],
@@ -71,39 +116,55 @@ function Dashboard() {
   });
 
   // Group requests by product so the owner sees demand, not raw events.
-  const grouped = Object.values(
-    rows.reduce<Record<string, { product: string; category: string | null; count: number; status: string; latest: string; ids: string[]; waitingContacts: { id: string; phone: string }[] }>>(
-      (acc, r) => {
-        const key = r.product_name.toLowerCase();
-        const existing = acc[key];
-        if (existing) {
-          existing.count += 1;
-          existing.ids.push(r.id);
-          if (r.status !== "new") existing.status = r.status;
-          if (r.customer_phone && !r.notified_at) {
-            existing.waitingContacts.push({ id: r.id, phone: r.customer_phone });
-          }
-        } else {
-          acc[key] = {
-            product: r.product_name,
-            category: r.category,
-            count: 1,
-            status: r.status,
-            latest: r.created_at,
-            ids: [r.id],
-            waitingContacts:
-              r.customer_phone && !r.notified_at ? [{ id: r.id, phone: r.customer_phone }] : [],
-          };
-        }
-        return acc;
-      },
-      {},
-    ),
-  ).sort((a, b) => b.count - a.count || +new Date(b.latest) - +new Date(a.latest));
+  const grouped = useMemo(
+    () =>
+      Object.values(
+        rows.reduce<Record<string, { product: string; category: string | null; count: number; status: string; latest: string; ids: string[]; waitingContacts: { id: string; phone: string }[] }>>(
+          (acc, r) => {
+            const key = r.product_name.toLowerCase();
+            const existing = acc[key];
+            if (existing) {
+              existing.count += 1;
+              existing.ids.push(r.id);
+              if (r.status !== "new") existing.status = r.status;
+              if (r.customer_phone && !r.notified_at) {
+                existing.waitingContacts.push({ id: r.id, phone: r.customer_phone });
+              }
+            } else {
+              acc[key] = {
+                product: r.product_name,
+                category: r.category,
+                count: 1,
+                status: r.status,
+                latest: r.created_at,
+                ids: [r.id],
+                waitingContacts:
+                  r.customer_phone && !r.notified_at ? [{ id: r.id, phone: r.customer_phone }] : [],
+              };
+            }
+            return acc;
+          },
+          {},
+        ),
+      ).sort((a, b) => b.count - a.count || +new Date(b.latest) - +new Date(a.latest)),
+    [rows],
+  );
 
-  const [notice, setNotice] = useState<string | null>(null);
-  const [sendingProduct, setSendingProduct] = useState<string | null>(null);
-  const [removingProduct, setRemovingProduct] = useState<string | null>(null);
+  const q = search.trim().toLowerCase();
+  const visible = q ? grouped.filter((g) => g.product.toLowerCase().includes(q)) : grouped;
+
+  const todayCount = rows.filter(
+    (r) => new Date(r.created_at).toDateString() === new Date().toDateString(),
+  ).length;
+  const waitingTotal = grouped.reduce((sum, g) => sum + g.waitingContacts.length, 0);
+
+  const hourly = useMemo(() => buildHourlyBuckets(rows), [rows]);
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { new: 0, ordering: 0, stocked: 0, ignored: 0 };
+    for (const r of rows) if (r.status in counts) counts[r.status] += 1;
+    return counts;
+  }, [rows]);
+  const waitingGroups = grouped.filter((g) => g.waitingContacts.length > 0);
 
   async function setStatus(ids: string[], status: string) {
     try {
@@ -170,173 +231,466 @@ function Dashboard() {
     }
   }
 
-  const todayCount = rows.filter(
-    (r) => new Date(r.created_at).toDateString() === new Date().toDateString(),
-  ).length;
-
   return (
-    <main className="mx-auto w-full max-w-6xl px-5 py-6 sm:px-8 sm:py-8">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-5">
-        <div>
-          <p className="font-display text-lg font-bold">DemandDrop</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Sharma General Store · Owner view</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to="/suppliers"
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
-          >
-            <Warehouse className="size-3.5" />
-            Supplier stock
-          </Link>
-          <Link
-            to="/counter"
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
-          >
-            <Mic className="size-3.5" />
-            Counter screen
-          </Link>
-        </div>
-      </header>
-
-      <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold sm:text-4xl">Demand you can act on.</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Ranked customer requests, refreshed every two seconds.
-          </p>
-        </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary uppercase">
+    <AppShell
+      sections={NAV_SECTIONS.map((s) => ({ ...s, items: [...s.items] }))}
+      activeTo="/dashboard"
+      search={
+        <label className="relative flex w-full max-w-sm items-center">
+          <Search className="pointer-events-none absolute left-3.5 size-4 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search a product…"
+            aria-label="Search the demand list"
+            className="h-10 w-full rounded-full border border-border bg-secondary pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+        </label>
+      }
+      topRight={
+        <span className="inline-flex items-center gap-2 rounded-full border border-live/40 bg-live/10 px-3 py-1.5 text-[11px] font-bold uppercase text-live">
           <span className="size-2 rounded-full bg-live animate-pulse" />
           Live demand
+        </span>
+      }
+      footer={
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Store className="size-3.5" />
+          Powered by DemandDrop
+        </p>
+      }
+    >
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold sm:text-3xl">Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Ranked customer requests, refreshed every two seconds.</p>
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-3">
+      {/* Stat cards */}
+      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Stat icon={<Users className="size-4" />} label="Total requests" value={rows.length} />
         <Stat icon={<PackageSearch className="size-4" />} label="Unique products" value={grouped.length} />
-        <Stat icon={<TrendingUp className="size-4" />} label="Today" value={todayCount} />
+        <Stat icon={<Clock className="size-4" />} label="Today" value={todayCount} />
+        <Stat icon={<BellRing className="size-4" />} label="Waiting for alert" value={waitingTotal} />
+      </div>
+
+      {/* Charts */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.7fr_1fr]">
+        <section className="surface rounded-2xl p-5">
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-full border border-primary/40 text-primary">
+              <TrendingUp className="size-4" />
+            </span>
+            <h2 className="text-sm font-bold">Requests by hour</h2>
+            <span className="ml-auto text-[11px] text-muted-foreground">Last 12 hours</span>
+          </div>
+          <HourChart buckets={hourly} />
+        </section>
+        <section className="surface rounded-2xl p-5">
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-full border border-primary/40 text-primary">
+              <Info className="size-4" />
+            </span>
+            <h2 className="text-sm font-bold">Request status</h2>
+          </div>
+          <StatusDonut counts={statusCounts} />
+        </section>
       </div>
 
       {notice && (
-        <div className="mt-6 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-medium text-primary">
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-live/40 bg-live/10 px-4 py-3 text-sm font-medium text-live">
           <MessageCircle className="size-4 shrink-0" />
           {notice}
         </div>
       )}
 
-      <div className="surface mt-6 overflow-hidden rounded-xl">
-        {isLoading ? (
-          <div className="space-y-3 p-6">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="h-12 animate-pulse rounded-xl bg-muted" />
-            ))}
+      {/* Demand table + waiting panel */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.7fr_1fr]">
+        <section className="surface overflow-hidden rounded-2xl">
+          <div className="flex items-center gap-2 px-5 pb-3 pt-4">
+            <span className="flex size-8 items-center justify-center rounded-full border border-primary/40 text-primary">
+              <PackageSearch className="size-4" />
+            </span>
+            <h2 className="text-sm font-bold">Demand list</h2>
+            {q && <span className="text-[11px] text-muted-foreground">filtered</span>}
           </div>
-        ) : error ? (
-          <div className="p-10 text-center text-sm text-destructive">
-            Couldn't load requests. Refresh the page to try again.
-          </div>
-        ) : grouped.length === 0 ? (
-          <div className="p-12 text-center">
-            <PackageSearch className="mx-auto size-8 text-muted-foreground" />
-            <p className="mt-3 font-medium">No requests yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Open the counter screen and speak or type an item — it will appear here instantly.
-            </p>
-            <Button asChild className="mt-4">
-              <Link to="/counter">Open counter screen</Link>
-            </Button>
-          </div>
-        ) : (
-          <ul className="divide-y divide-border">
-            {grouped.map((g) => (
-               <li key={g.product} className="flex flex-wrap items-start gap-3 p-4 transition-colors hover:bg-secondary/40 sm:items-center sm:px-6">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-secondary font-mono text-lg font-bold text-primary">
-                  {g.count}
-                </div>
-                <div className="min-w-0 basis-[calc(100%-3.5rem)] sm:flex-1 sm:basis-auto">
-                  <p className="truncate font-medium">{g.product}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {g.category ?? "Other"} · {g.count === 1 ? "1 person asked" : `${g.count} people asked`}
-                  </p>
-                  {g.waitingContacts.length > 0 && (
-                    <div className="mt-1.5 space-y-1 text-xs text-primary">
-                      <p className="inline-flex items-center gap-1 font-medium">
-                        <MessageCircle className="size-3" />
-                        {g.waitingContacts.length === 1 ? "1 customer" : `${g.waitingContacts.length} customers`} waiting for a WhatsApp alert
-                      </p>
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
-                        {g.waitingContacts.map((contact) => (
-                          <span key={contact.id}>+{contact.phone}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <span className={`ml-14 rounded-full px-3 py-1 text-xs font-medium sm:ml-0 ${STATUS_STYLE[g.status] ?? ""}`}>
-                  {STATUS_LABEL[g.status] ?? g.status}
-                </span>
-                <select
-                  aria-label={`Set status for ${g.product}`}
-                  value={g.status}
-                  onChange={(e) => void setStatus(g.ids, e.target.value)}
-                  className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-semibold text-foreground"
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s} className="text-foreground">
-                      {STATUS_LABEL[s]}
-                    </option>
+          {isLoading ? (
+            <div className="space-y-3 p-6">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-12 animate-pulse rounded-xl bg-muted" />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="p-10 text-center text-sm text-destructive">
+              Couldn't load requests. Refresh the page to try again.
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="p-12 text-center">
+              <PackageSearch className="mx-auto size-8 text-muted-foreground" />
+              <p className="mt-3 font-medium">{q ? "No product matches that search" : "No requests yet"}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {q ? "Try another name — the charts above cover every request." : "Open the counter screen and speak or type an item — it will appear here instantly."}
+              </p>
+              {!q && (
+                <Button asChild className="mt-4">
+                  <Link to="/counter">Open counter screen</Link>
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-sm">
+                <thead>
+                  <tr className="thead-mint text-left text-xs font-bold">
+                    <th className="px-5 py-3">Product</th>
+                    <th className="px-3 py-3">Asked</th>
+                    <th className="px-3 py-3">Status</th>
+                    <th className="px-3 py-3">WhatsApp</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((g) => (
+                    <tr key={g.product} className="border-t border-border transition-colors hover:bg-secondary/40">
+                      <td className="max-w-[220px] px-5 py-3">
+                        <p className="truncate font-semibold">{g.product}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${categoryStyle(g.category)}`}>
+                            {g.category ?? "Other"}
+                          </span>
+                          {g.waitingContacts.length > 0 && (
+                            <div className="flex flex-wrap gap-x-2 font-mono text-[11px] text-muted-foreground">
+                              {g.waitingContacts.map((c) => (
+                                <span key={c.id}>+{c.phone}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className="font-mono text-base font-bold text-primary">{g.count}</span>
+                        <span className="ml-1 text-[11px] text-muted-foreground">
+                          {g.count === 1 ? "person" : "people"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLE[g.status] ?? ""}`}>
+                          {STATUS_LABEL[g.status] ?? g.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-xs">
+                        {g.waitingContacts.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 font-semibold text-live">
+                            <MessageCircle className="size-3.5" />
+                            {g.waitingContacts.length} waiting
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          <select
+                            aria-label={`Set status for ${g.product}`}
+                            value={g.status}
+                            onChange={(e) => void setStatus(g.ids, e.target.value)}
+                            className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-semibold text-foreground"
+                          >
+                            {STATUSES.map((s) => (
+                              <option key={s} value={s} className="text-foreground">
+                                {STATUS_LABEL[s]}
+                              </option>
+                            ))}
+                          </select>
+                          {g.waitingContacts.length > 0 && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => void notifyCustomers(g.product, g.waitingContacts.map((c) => c.id))}
+                              disabled={sendingProduct !== null || removingProduct !== null}
+                              className="shrink-0"
+                            >
+                              {sendingProduct === g.product ? <Loader2 className="animate-spin" /> : <Send />}
+                              <span className="hidden sm:inline">Send WhatsApp</span>
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void removeGroup(g.product, g.ids)}
+                            disabled={removingProduct !== null}
+                            className="shrink-0 text-destructive"
+                            aria-label={`Remove ${g.product} from the demand list`}
+                          >
+                            {removingProduct === g.product ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                            <span className="hidden sm:inline">Remove</span>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
                   ))}
-                </select>
-                {g.waitingContacts.length > 0 && (
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="surface overflow-hidden rounded-2xl">
+          <div className="flex items-center gap-2 px-5 pb-3 pt-4">
+            <span className="flex size-8 items-center justify-center rounded-full border border-live/40 text-live">
+              <BellRing className="size-4" />
+            </span>
+            <h2 className="text-sm font-bold">Waiting on WhatsApp</h2>
+            {waitingTotal > 0 && (
+              <span className="ml-auto rounded-full bg-live px-2 py-0.5 text-[11px] font-bold text-live-foreground">
+                {waitingTotal}
+              </span>
+            )}
+          </div>
+          {waitingGroups.length === 0 ? (
+            <div className="px-5 pb-8 pt-4 text-center">
+              <MessageCircle className="mx-auto size-7 text-muted-foreground" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                Nobody is waiting right now. When customers leave their number, they appear here.
+              </p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {waitingGroups.map((g) => (
+                <li key={g.product} className="px-5 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-semibold">{g.product}</p>
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${STATUS_STYLE[g.status] ?? ""}`}>
+                      {STATUS_LABEL[g.status] ?? g.status}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 font-mono text-[11px] text-muted-foreground">
+                    {g.waitingContacts.map((c) => (
+                      <span key={c.id}>+{c.phone}</span>
+                    ))}
+                  </div>
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => void notifyCustomers(g.product, g.waitingContacts.map((contact) => contact.id))}
+                    variant="secondary"
+                    className="mt-2 w-full"
+                    onClick={() => void notifyCustomers(g.product, g.waitingContacts.map((c) => c.id))}
                     disabled={sendingProduct !== null || removingProduct !== null}
-                    className="shrink-0"
                   >
-                    {sendingProduct === g.product ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Send />
-                    )}
+                    {sendingProduct === g.product ? <Loader2 className="animate-spin" /> : <Send />}
                     Send WhatsApp
                   </Button>
-                )}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void removeGroup(g.product, g.ids)}
-                  disabled={removingProduct !== null}
-                  className="shrink-0 text-destructive"
-                  aria-label={`Remove ${g.product} from the demand list`}
-                >
-                  {removingProduct === g.product ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Trash2 />
-                  )}
-                  Remove
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
-    </main>
+    </AppShell>
   );
 }
 
 function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
   return (
-    <div className="surface rounded-xl p-4">
-      <div className="flex items-center gap-1.5 text-muted-foreground">
-        {icon}
-        <span className="text-xs">{label}</span>
+    <div className="surface rounded-2xl p-4 transition-colors hover:border-primary/40">
+      <div className="flex items-center gap-2">
+        <span className="flex size-7 items-center justify-center rounded-full border border-primary/40 text-primary">
+          {icon}
+        </span>
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <Info className="ml-auto size-3.5 text-muted-foreground/60" />
       </div>
-      <p className="mt-2 font-mono text-2xl font-bold text-foreground">{value}</p>
+      <p className="mt-2 font-mono text-2xl font-bold text-foreground">
+        <AnimatedNumber value={value} />
+      </p>
+    </div>
+  );
+}
+
+function AnimatedNumber({ value }: { value: number }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const start = performance.now();
+    const from = display;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / 450);
+      setDisplay(Math.round(from + (value - from) * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return <>{display}</>;
+}
+
+type HourBucket = { label: string; count: number };
+
+function buildHourlyBuckets(rows: Row[]): HourBucket[] {
+  const now = new Date();
+  const buckets = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now);
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() - (11 - i));
+    const h = d.getHours();
+    return { label: `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? "am" : "pm"}`, start: d.getTime(), count: 0 };
+  });
+  for (const r of rows) {
+    const t = +new Date(r.created_at);
+    for (let i = buckets.length - 1; i >= 0; i--) {
+      if (t >= buckets[i].start) {
+        buckets[i].count += 1;
+        break;
+      }
+    }
+  }
+  return buckets.map(({ label, count }) => ({ label, count }));
+}
+
+function HourChart({ buckets }: { buckets: HourBucket[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const max = Math.max(1, ...buckets.map((b) => b.count));
+  const W = 620;
+  const H = 230;
+  const top = 28;
+  const bottom = 34;
+  const colW = W / buckets.length;
+  const barW = colW * 0.52;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="mt-3 w-full" role="img" aria-label="Requests by hour chart">
+      <defs>
+        <linearGradient id="barGrad" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor="var(--color-chart-2)" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="var(--color-chart-2)" stopOpacity="0.95" />
+        </linearGradient>
+      </defs>
+      {buckets.map((b, i) => {
+        const h = (b.count / max) * (H - top - bottom);
+        const x = i * colW + (colW - barW) / 2;
+        const y = H - bottom - h;
+        const isHover = hover === i;
+        return (
+          <g key={b.label + i}>
+            <text
+              x={i * colW + colW / 2}
+              y={y - 6}
+              textAnchor="middle"
+              className="fill-foreground font-mono"
+              fontSize="10"
+              opacity={hover === null || isHover ? 0.9 : 0.35}
+            >
+              {b.count}
+            </text>
+            <rect
+              x={x}
+              y={y}
+              width={barW}
+              height={Math.max(h, b.count > 0 ? 4 : 0)}
+              rx={5}
+              fill="url(#barGrad)"
+              opacity={hover === null || isHover ? 1 : 0.45}
+              className="transition-opacity"
+            />
+            <text
+              x={i * colW + colW / 2}
+              y={H - 12}
+              textAnchor="middle"
+              fontSize="10"
+              className={isHover ? "fill-foreground" : "fill-muted-foreground"}
+            >
+              {b.label}
+            </text>
+            {/* Full-column hover target */}
+            <rect
+              x={i * colW}
+              y={0}
+              width={colW}
+              height={H}
+              fill="transparent"
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function StatusDonut({ counts }: { counts: Record<string, number> }) {
+  const [hover, setHover] = useState<string | null>(null);
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const segments = STATUSES.map((s) => ({
+    key: s,
+    label: STATUS_LABEL[s],
+    color: STATUS_CHART_COLOR[s],
+    value: counts[s] ?? 0,
+  })).filter((s) => s.value > 0);
+
+  const size = 190;
+  const r = 72;
+  const stroke = 26;
+  const C = 2 * Math.PI * r;
+  let offset = 0;
+
+  return (
+    <div className="mt-4 flex flex-col items-center gap-5 sm:flex-row">
+      <svg viewBox={`0 0 ${size} ${size}`} className="w-44 shrink-0 -rotate-90" role="img" aria-label="Request status chart">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-secondary)" strokeWidth={stroke} />
+        {segments.length === 0 ? (
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-secondary)" strokeWidth={stroke} />
+        ) : (
+          segments.map((s) => {
+            const frac = s.value / Math.max(1, total);
+            const dash = Math.max(frac * C - 4, 2);
+            const el = (
+              <circle
+                key={s.key}
+                cx={size / 2}
+                cy={size / 2}
+                r={r}
+                fill="none"
+                stroke={s.color}
+                strokeWidth={hover && hover !== s.key ? stroke - 6 : stroke}
+                strokeDasharray={`${dash} ${C - dash}`}
+                strokeDashoffset={-offset}
+                strokeLinecap="round"
+                opacity={hover && hover !== s.key ? 0.4 : 1}
+                className="transition-all"
+                onMouseEnter={() => setHover(s.key)}
+                onMouseLeave={() => setHover(null)}
+              />
+            );
+            offset += frac * C;
+            return el;
+          })
+        )}
+      </svg>
+      <ul className="w-full space-y-1.5">
+        {STATUSES.map((s) => {
+          const value = counts[s] ?? 0;
+          const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+          const dim = hover && hover !== s;
+          return (
+            <li
+              key={s}
+              onMouseEnter={() => value > 0 && setHover(s)}
+              onMouseLeave={() => setHover(null)}
+              className={`flex items-center gap-2.5 rounded-lg px-2 py-1 text-sm transition-opacity ${dim ? "opacity-50" : ""}`}
+            >
+              <span className="size-3 shrink-0 rounded-[4px]" style={{ background: STATUS_CHART_COLOR[s] }} />
+              <span className="font-medium">{STATUS_LABEL[s]}</span>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">
+                {value > 0 ? `${pct}%` : "—"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
