@@ -56,6 +56,9 @@
   --color-cat-household: var(--cat-household);
   --color-cat-other: var(--cat-other);
   --color-badge-foreground: var(--badge-foreground);
+  --color-thead-mint: var(--thead-mint);
+  --color-thead-rose: var(--thead-rose);
+  --color-thead-ink: var(--thead-ink);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
@@ -231,6 +234,16 @@
   background-color: var(--color-card);
   border: 1px solid var(--color-border);
   box-shadow: 0 18px 50px -32px color-mix(in oklab, var(--color-primary) 24%, transparent);
+}
+
+@utility thead-mint {
+  background-color: var(--color-thead-mint);
+  color: var(--color-thead-ink);
+}
+
+@utility thead-rose {
+  background-color: var(--color-thead-rose);
+  color: var(--color-thead-ink);
 }
 
 @keyframes mic-pulse {
