@@ -6,6 +6,7 @@ import {
   BellRing,
   Clock,
   Info,
+  LayoutDashboard,
   Loader2,
   MessageCircle,
   Mic,
