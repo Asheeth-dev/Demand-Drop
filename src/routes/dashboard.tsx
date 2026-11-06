@@ -146,7 +146,7 @@ function Dashboard() {
   const hourly = useMemo(() => buildHourlyBuckets(rows), [rows]);
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { new: 0, ordering: 0, stocked: 0, ignored: 0 };
-    for (const r of rows) if (r.status in counts) counts[r.status] += 1;
+    for (const r of rows) if (r.status in counts) counts[r.status] = (counts[r.status] ?? 0) + 1;
     return counts;
   }, [rows]);
   const waitingGroups = grouped.filter((g) => g.waitingContacts.length > 0);
@@ -526,8 +526,9 @@ function buildHourlyBuckets(rows: Row[]): HourBucket[] {
   for (const r of rows) {
     const t = +new Date(r.created_at);
     for (let i = buckets.length - 1; i >= 0; i--) {
-      if (t >= buckets[i].start) {
-        buckets[i].count += 1;
+      const bucket = buckets[i];
+      if (bucket && t >= bucket.start) {
+        bucket.count += 1;
         break;
       }
     }
