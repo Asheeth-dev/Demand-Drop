@@ -83,7 +83,7 @@ const NAV_SECTIONS = [
   {
     label: "General",
     items: [
-      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
+      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { to: "/counter", label: "Counter screen", icon: Mic },
     ],
   },
@@ -92,9 +92,6 @@ const NAV_SECTIONS = [
     items: [{ to: "/suppliers", label: "Supplier stock", icon: Warehouse, dot: true }],
   },
 ] as const;
-
-// tiny alias so the sections array above can reference the lucide icon directly
-import { LayoutDashboard as LayoutDashboardIcon } from "lucide-react";
 
 function Dashboard() {
   const qc = useQueryClient();
