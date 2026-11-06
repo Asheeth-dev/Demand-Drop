@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Loader2, PackageSearch, RefreshCw, Warehouse } from "lucide-react";
 
 import { listSupplierInventory } from "@/lib/inventory.functions";
+import { categoryStyle, stockBadge } from "@/lib/inventory-ui";
 import { AppShell } from "@/components/app-shell";
 import { NAV_SECTIONS } from "@/components/owner-nav";
 
@@ -144,5 +145,3 @@ function SupplierStockView() {
     </AppShell>
   );
 }
-
-import { categoryStyle, stockBadge } from "@/lib/inventory-ui";
