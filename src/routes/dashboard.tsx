@@ -22,6 +22,7 @@ import {
 
 import { deleteDemands, listDemands, notifyDemandCustomers, setDemandStatus } from "@/lib/demand.functions";
 import { AppShell } from "@/components/app-shell";
+import { NAV_SECTIONS } from "@/components/owner-nav";
 import { categoryStyle } from "@/lib/inventory-ui";
 import { Button } from "@/components/ui/button";
 
@@ -78,23 +79,6 @@ const STATUS_CHART_COLOR: Record<string, string> = {
   stocked: "var(--color-chart-3)",
   ignored: "var(--color-chart-5)",
 };
-
-const NAV_SECTIONS = [
-  {
-    label: "General",
-    items: [
-      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
-      { to: "/counter", label: "Counter screen", icon: Mic },
-    ],
-  },
-  {
-    label: "Tools",
-    items: [{ to: "/suppliers", label: "Supplier stock", icon: Warehouse, dot: true }],
-  },
-] as const;
-
-// tiny alias so the sections array above can reference the lucide icon directly
-import { LayoutDashboard as LayoutDashboardIcon } from "lucide-react";
 
 function Dashboard() {
   const qc = useQueryClient();
@@ -162,7 +146,7 @@ function Dashboard() {
   const hourly = useMemo(() => buildHourlyBuckets(rows), [rows]);
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { new: 0, ordering: 0, stocked: 0, ignored: 0 };
-    for (const r of rows) if (r.status in counts) counts[r.status] += 1;
+    for (const r of rows) if (r.status in counts) counts[r.status] = (counts[r.status] ?? 0) + 1;
     return counts;
   }, [rows]);
   const waitingGroups = grouped.filter((g) => g.waitingContacts.length > 0);
@@ -347,26 +331,29 @@ function Dashboard() {
                     <th className="px-5 py-3">Product</th>
                     <th className="px-3 py-3">Asked</th>
                     <th className="px-3 py-3">Status</th>
-                    <th className="px-3 py-3">WhatsApp</th>
                     <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((g) => (
                     <tr key={g.product} className="border-t border-border transition-colors hover:bg-secondary/40">
-                      <td className="max-w-[220px] px-5 py-3">
+                      <td className="max-w-[230px] px-5 py-3">
                         <p className="truncate font-semibold">{g.product}</p>
-                        <div className="mt-1 flex items-center gap-2">
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${categoryStyle(g.category)}`}>
                             {g.category ?? "Other"}
                           </span>
                           {g.waitingContacts.length > 0 && (
-                            <div className="flex flex-wrap gap-x-2 font-mono text-[11px] text-muted-foreground">
-                              {g.waitingContacts.map((c) => (
-                                <span key={c.id}>+{c.phone}</span>
-                              ))}
-                            </div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-live">
+                              <MessageCircle className="size-3" />
+                              {g.waitingContacts.length} waiting
+                            </span>
                           )}
+                          <div className="flex flex-wrap gap-x-2 font-mono text-[11px] text-muted-foreground">
+                            {g.waitingContacts.map((c) => (
+                              <span key={c.id}>+{c.phone}</span>
+                            ))}
+                          </div>
                         </div>
                       </td>
                       <td className="px-3 py-3">
@@ -376,27 +363,17 @@ function Dashboard() {
                         </span>
                       </td>
                       <td className="px-3 py-3">
-                        <span className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLE[g.status] ?? ""}`}>
+                        <span className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLE[g.status] ?? ""}`}>
                           {STATUS_LABEL[g.status] ?? g.status}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-xs">
-                        {g.waitingContacts.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 font-semibold text-live">
-                            <MessageCircle className="size-3.5" />
-                            {g.waitingContacts.length} waiting
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
                       <td className="px-5 py-3">
-                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1.5">
                           <select
                             aria-label={`Set status for ${g.product}`}
                             value={g.status}
                             onChange={(e) => void setStatus(g.ids, e.target.value)}
-                            className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-semibold text-foreground"
+                            className="w-[7.2rem] rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-semibold text-foreground"
                           >
                             {STATUSES.map((s) => (
                               <option key={s} value={s} className="text-foreground">
@@ -411,9 +388,9 @@ function Dashboard() {
                               onClick={() => void notifyCustomers(g.product, g.waitingContacts.map((c) => c.id))}
                               disabled={sendingProduct !== null || removingProduct !== null}
                               className="shrink-0"
+                              aria-label={`Send WhatsApp for ${g.product}`}
                             >
                               {sendingProduct === g.product ? <Loader2 className="animate-spin" /> : <Send />}
-                              <span className="hidden sm:inline">Send WhatsApp</span>
                             </Button>
                           )}
                           <Button
@@ -426,7 +403,6 @@ function Dashboard() {
                             aria-label={`Remove ${g.product} from the demand list`}
                           >
                             {removingProduct === g.product ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                            <span className="hidden sm:inline">Remove</span>
                           </Button>
                         </div>
                       </td>
@@ -542,8 +518,9 @@ function buildHourlyBuckets(rows: Row[]): HourBucket[] {
   for (const r of rows) {
     const t = +new Date(r.created_at);
     for (let i = buckets.length - 1; i >= 0; i--) {
-      if (t >= buckets[i].start) {
-        buckets[i].count += 1;
+      const bucket = buckets[i];
+      if (bucket && t >= bucket.start) {
+        bucket.count += 1;
         break;
       }
     }
@@ -684,7 +661,7 @@ function StatusDonut({ counts }: { counts: Record<string, number> }) {
               className={`flex items-center gap-2.5 rounded-lg px-2 py-1 text-sm transition-opacity ${dim ? "opacity-50" : ""}`}
             >
               <span className="size-3 shrink-0 rounded-[4px]" style={{ background: STATUS_CHART_COLOR[s] }} />
-              <span className="font-medium">{STATUS_LABEL[s]}</span>
+              <span className="truncate font-medium">{STATUS_LABEL[s]}</span>
               <span className="ml-auto font-mono text-xs text-muted-foreground">
                 {value > 0 ? `${pct}%` : "—"}
               </span>
