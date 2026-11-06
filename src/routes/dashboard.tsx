@@ -360,7 +360,7 @@ function Dashboard() {
                         </span>
                       </td>
                       <td className="px-3 py-3">
-                        <span className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLE[g.status] ?? ""}`}>
+                        <span className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLE[g.status] ?? ""}`}>
                           {STATUS_LABEL[g.status] ?? g.status}
                         </span>
                       </td>
@@ -375,12 +375,12 @@ function Dashboard() {
                         )}
                       </td>
                       <td className="px-5 py-3">
-                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1.5">
                           <select
                             aria-label={`Set status for ${g.product}`}
                             value={g.status}
                             onChange={(e) => void setStatus(g.ids, e.target.value)}
-                            className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-semibold text-foreground"
+                            className="w-[7.2rem] rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-semibold text-foreground"
                           >
                             {STATUSES.map((s) => (
                               <option key={s} value={s} className="text-foreground">
@@ -395,9 +395,9 @@ function Dashboard() {
                               onClick={() => void notifyCustomers(g.product, g.waitingContacts.map((c) => c.id))}
                               disabled={sendingProduct !== null || removingProduct !== null}
                               className="shrink-0"
+                              aria-label={`Send WhatsApp for ${g.product}`}
                             >
                               {sendingProduct === g.product ? <Loader2 className="animate-spin" /> : <Send />}
-                              <span className="hidden sm:inline">Send WhatsApp</span>
                             </Button>
                           )}
                           <Button
@@ -410,7 +410,6 @@ function Dashboard() {
                             aria-label={`Remove ${g.product} from the demand list`}
                           >
                             {removingProduct === g.product ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                            <span className="hidden sm:inline">Remove</span>
                           </Button>
                         </div>
                       </td>
@@ -669,7 +668,7 @@ function StatusDonut({ counts }: { counts: Record<string, number> }) {
               className={`flex items-center gap-2.5 rounded-lg px-2 py-1 text-sm transition-opacity ${dim ? "opacity-50" : ""}`}
             >
               <span className="size-3 shrink-0 rounded-[4px]" style={{ background: STATUS_CHART_COLOR[s] }} />
-              <span className="font-medium">{STATUS_LABEL[s]}</span>
+              <span className="truncate font-medium">{STATUS_LABEL[s]}</span>
               <span className="ml-auto font-mono text-xs text-muted-foreground">
                 {value > 0 ? `${pct}%` : "—"}
               </span>
