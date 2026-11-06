@@ -1,10 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { LayoutDashboard, Loader2, PackageSearch, Warehouse } from "lucide-react";
+import { Loader2, PackageSearch, RefreshCw, Warehouse } from "lucide-react";
 
 import { listSupplierInventory } from "@/lib/inventory.functions";
-import { categoryStyle, stockBadge } from "@/lib/inventory-ui";
+import { AppShell } from "@/components/app-shell";
+import { NAV_SECTIONS } from "@/components/owner-nav";
 
 export const Route = createFileRoute("/suppliers")({
   head: () => ({
@@ -51,27 +52,25 @@ function SupplierStockView() {
   });
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-5 py-6 sm:px-8 sm:py-8">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-5">
-        <div>
-          <p className="font-display flex items-center gap-2 text-lg font-bold">
-            <Warehouse className="size-5 text-primary" />
-            DemandDrop
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Supplier stock · Owner view</p>
-        </div>
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
-        >
-          <LayoutDashboard className="size-3.5" />
-          Demand list
-        </Link>
-      </header>
-
-      <div className="mt-8">
-        <h1 className="text-3xl font-bold sm:text-4xl">What your suppliers have.</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+    <AppShell
+      sections={NAV_SECTIONS}
+      activeTo="/suppliers"
+      topRight={
+        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1.5 text-[11px] font-bold uppercase text-muted-foreground">
+          <RefreshCw className="size-3" />
+          Refreshes every 15s
+        </span>
+      }
+      footer={
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Warehouse className="size-3.5" />
+          Powered by DemandDrop
+        </p>
+      }
+    >
+      <div>
+        <h1 className="font-display text-2xl font-bold sm:text-3xl">What your suppliers have.</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Every supplier's live inventory — products, brands, prices and stock — so you know what you
           can source before you order.
         </p>
@@ -96,7 +95,7 @@ function SupplierStockView() {
       ) : (
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           {suppliers.map((supplier) => (
-            <section key={supplier.userId} className="surface overflow-hidden rounded-xl">
+            <section key={supplier.userId} className="surface overflow-hidden rounded-2xl transition-colors hover:border-primary/40">
               <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{supplier.storeName}</p>
@@ -104,7 +103,7 @@ function SupplierStockView() {
                     {supplier.itemCount === 1 ? "1 product" : `${supplier.itemCount} products`}
                   </p>
                 </div>
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/40 text-primary">
                   <Warehouse className="size-4.5" />
                 </span>
               </div>
@@ -112,7 +111,7 @@ function SupplierStockView() {
                 {supplier.items.map((item) => {
                   const stock = stockBadge(item.stock);
                   return (
-                    <li key={item.product_name} className="flex items-center justify-between gap-3 px-5 py-3">
+                    <li key={item.product_name} className="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-secondary/40">
                       <div className="min-w-0">
                         <p className="truncate font-medium">{item.product_name}</p>
                         <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -142,6 +141,8 @@ function SupplierStockView() {
           ))}
         </div>
       )}
-    </main>
+    </AppShell>
   );
 }
+
+import { categoryStyle, stockBadge } from "@/lib/inventory-ui";
