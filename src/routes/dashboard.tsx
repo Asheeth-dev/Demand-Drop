@@ -22,6 +22,7 @@ import {
 
 import { deleteDemands, listDemands, notifyDemandCustomers, setDemandStatus } from "@/lib/demand.functions";
 import { AppShell } from "@/components/app-shell";
+import { NAV_SECTIONS } from "@/components/owner-nav";
 import { categoryStyle } from "@/lib/inventory-ui";
 import { Button } from "@/components/ui/button";
 
@@ -78,20 +79,6 @@ const STATUS_CHART_COLOR: Record<string, string> = {
   stocked: "var(--color-chart-3)",
   ignored: "var(--color-chart-5)",
 };
-
-const NAV_SECTIONS = [
-  {
-    label: "General",
-    items: [
-      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { to: "/counter", label: "Counter screen", icon: Mic },
-    ],
-  },
-  {
-    label: "Tools",
-    items: [{ to: "/suppliers", label: "Supplier stock", icon: Warehouse, dot: true }],
-  },
-] as const;
 
 function Dashboard() {
   const qc = useQueryClient();
