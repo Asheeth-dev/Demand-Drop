@@ -331,26 +331,29 @@ function Dashboard() {
                     <th className="px-5 py-3">Product</th>
                     <th className="px-3 py-3">Asked</th>
                     <th className="px-3 py-3">Status</th>
-                    <th className="px-3 py-3">WhatsApp</th>
                     <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((g) => (
                     <tr key={g.product} className="border-t border-border transition-colors hover:bg-secondary/40">
-                      <td className="max-w-[220px] px-5 py-3">
+                      <td className="max-w-[230px] px-5 py-3">
                         <p className="truncate font-semibold">{g.product}</p>
-                        <div className="mt-1 flex items-center gap-2">
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${categoryStyle(g.category)}`}>
                             {g.category ?? "Other"}
                           </span>
                           {g.waitingContacts.length > 0 && (
-                            <div className="flex flex-wrap gap-x-2 font-mono text-[11px] text-muted-foreground">
-                              {g.waitingContacts.map((c) => (
-                                <span key={c.id}>+{c.phone}</span>
-                              ))}
-                            </div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-live">
+                              <MessageCircle className="size-3" />
+                              {g.waitingContacts.length} waiting
+                            </span>
                           )}
+                          <div className="flex flex-wrap gap-x-2 font-mono text-[11px] text-muted-foreground">
+                            {g.waitingContacts.map((c) => (
+                              <span key={c.id}>+{c.phone}</span>
+                            ))}
+                          </div>
                         </div>
                       </td>
                       <td className="px-3 py-3">
@@ -363,16 +366,6 @@ function Dashboard() {
                         <span className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLE[g.status] ?? ""}`}>
                           {STATUS_LABEL[g.status] ?? g.status}
                         </span>
-                      </td>
-                      <td className="px-3 py-3 text-xs">
-                        {g.waitingContacts.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 font-semibold text-live">
-                            <MessageCircle className="size-3.5" />
-                            {g.waitingContacts.length} waiting
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center justify-end gap-1.5">
